@@ -347,6 +347,14 @@ func (s *APIServer) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 		add("TFTP", "pass", fmt.Sprintf("Served %s over port %d", bootfiles.FileAutoexec, cfg.Network.TFTPPort))
 	}
 
+	// iSCSI target (virtual CDs for the long-tail ISOs).
+	if c, err := net.DialTimeout("tcp4", fmt.Sprintf("127.0.0.1:%d", cfg.Network.ISCSIPort), 3*time.Second); err == nil {
+		c.Close()
+		add("iSCSI target", "pass", fmt.Sprintf("Accepting connections on port %d", cfg.Network.ISCSIPort))
+	} else {
+		add("iSCSI target", "fail", fmt.Sprintf("Not accepting on port %d — virtual-CD boots (Debian installer, BSDs, unknown ISOs) will fail", cfg.Network.ISCSIPort))
+	}
+
 	// DHCP responder.
 	if s.d.RogueActive != nil && s.d.RogueActive() {
 		add("Rogue PXE detection", "pass", "Passively monitoring udp/68 for other PXE servers")

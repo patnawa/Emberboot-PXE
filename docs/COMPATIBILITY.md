@@ -18,9 +18,17 @@ of dying mid-transfer.
 | **suse** | openSUSE Leap, SLES (15 and older) | kernel/initrd extracted; linuxrc fetches the raw ISO (`install=`); AutoYaST via assigned answer file | Moderate RAM. SLES 16 / Leap 16 (Agama) not yet auto-detected |
 | **archiso** | Arch Linux, SystemRescue, EndeavourOS | kernel/initrd (+ microcode) extracted; `airootfs.sfs` fetched over HTTP with checksum verification | Client RAM > rootfs size |
 | **alpine** | Alpine standard/virt ISOs | kernel/initrd extracted; modloop served from the ISO; packages from the official mirror | Internet access from the client |
-| **debian-installer** | Debian netinst/DVD | Explained honestly: d-i's own initrd cannot netboot from an ISO. Falls back to Memdisk (works occasionally); prefer Debian netboot images or a preseed mirror | Client RAM > ISO size |
-| **proxmox** | Proxmox VE | Explained honestly: Proxmox does not support direct netboot. Falls back to Memdisk (usually fails past the loader); use USB install or the pve-iso-2-pxe method | — |
-| **memdisk / unknown** | Rescue tools, DOS/firmware utilities, anything unrecognized | Whole ISO into RAM via iPXE `sanboot`. Small ISOs carrying a standalone EFI app (memtest86+ and similar) are chained directly on UEFI clients — no RAM limit, no sanboot quirks | BIOS: reliable. UEFI without a standalone EFI app: firmware-dependent |
+| **debian-installer** | Debian netinst/DVD | **Virtual CD over the embedded iSCSI target**: iPXE attaches the LUN (`sanboot --keep`), boots the installer, and the iBFT lets the OS reattach to its media. No RAM limit | Reachable TCP 3260 from the client VLAN |
+| **proxmox** | Proxmox VE | Virtual CD over iSCSI (Proxmox has no direct netboot support) | Reachable TCP 3260 |
+| **unknown (iSCSI virtual CD)** | BSDs (pfSense/OPNsense/FreeBSD), appliances, DOS/firmware utilities, anything unrecognized | Virtual CD over iSCSI, full media emulation. Small ISOs carrying a standalone EFI app (memtest86+ style) chain it directly on UEFI. Whole-ISO-into-RAM (`sanboot` http) remains the scripted last resort | Reachable TCP 3260; OS-side reattach support varies (see note) |
+
+**iSCSI reattach note**: iPXE's `--keep` registers the session in the iBFT.
+Bootloaders and kernels always read the virtual CD fine; whether the *OS
+installer* can keep using it after taking over the NIC varies (Debian d-i
+loads iSCSI support, BSD loaders read the whole kernel before takeover).
+When an installer loses its media mid-way, the fallback is the RAM-load
+path or a family-specific strategy. The dashboard's session timeline shows
+exactly how far each attempt got.
 
 ## Firmware
 

@@ -27,6 +27,7 @@ import (
 	"emberboot/internal/dhcpsrv"
 	"emberboot/internal/httpsrv"
 	"emberboot/internal/images"
+	"emberboot/internal/iscsisrv"
 	"emberboot/internal/logging"
 	"emberboot/internal/metrics"
 	"emberboot/internal/netutil"
@@ -239,6 +240,20 @@ func run() error {
 		errc <- fmt.Errorf("tftp: %w", tftpServer.Serve(":"+strconv.Itoa(cfg.Network.TFTPPort)))
 	}()
 	defer tftpServer.Shutdown()
+
+	// iSCSI target: virtual CDs for images that cannot netboot otherwise.
+	iscsiServer := iscsisrv.New(iscsisrv.Deps{
+		Log:         log,
+		Provider:    imgMgr,
+		AdvertiseIP: advertise.String(),
+		Port:        cfg.Network.ISCSIPort,
+		OnAttach: func(clientIP, target string) {
+			store.TouchByIP(clientIP, "payload", "attached iSCSI virtual CD "+target)
+			log.Info("iscsi attach", "client", clientIP, "target", target)
+		},
+	})
+	go func() { errc <- fmt.Errorf("iscsi: %w", iscsiServer.Serve()) }()
+	defer iscsiServer.Close()
 
 	// Boot HTTP.
 	bootHTTP := httpsrv.NewBoot(httpsrv.BootDeps{

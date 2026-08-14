@@ -60,6 +60,9 @@ type Network struct {
 	// restricted to a management VLAN, e.g. "10.0.9.5:8443". Empty disables
 	// the dashboard.
 	DashboardBind string `yaml:"dashboard_bind"`
+	// ISCSIPort serves the embedded read-only iSCSI target (virtual CDs for
+	// ISOs that cannot netboot otherwise). 0 applies the default 3260.
+	ISCSIPort int `yaml:"iscsi_port"`
 }
 
 type Images struct {
@@ -82,7 +85,7 @@ type ImageSettings struct {
 	AnswerFile string `yaml:"answer_file"`
 	// Disabled hides a Ready image from all menus without deleting it.
 	Disabled bool `yaml:"disabled"`
-	// Strategy forces a Boot Strategy (linux-extract|wimboot|memdisk),
+	// Strategy forces a Boot Strategy (linux-extract|wimboot|memdisk|iscsi),
 	// overriding detection. Empty means auto-detect.
 	Strategy string `yaml:"strategy"`
 	// KernelArgs appends extra kernel command-line arguments (LinuxExtract).
@@ -169,6 +172,9 @@ func (c *Config) ApplyDefaults() {
 	if c.Network.HTTPPort == 0 {
 		c.Network.HTTPPort = 8090
 	}
+	if c.Network.ISCSIPort == 0 {
+		c.Network.ISCSIPort = 3260
+	}
 	if c.Images.Dir == "" {
 		c.Images.Dir = "images"
 	}
@@ -222,8 +228,9 @@ func (c *Config) Validate() error {
 		add("network.advertise_ip: %q is not a valid IP", c.Network.AdvertiseIP)
 	}
 	for name, port := range map[string]int{
-		"network.tftp_port": c.Network.TFTPPort,
-		"network.http_port": c.Network.HTTPPort,
+		"network.tftp_port":  c.Network.TFTPPort,
+		"network.http_port":  c.Network.HTTPPort,
+		"network.iscsi_port": c.Network.ISCSIPort,
 	} {
 		if port < 1 || port > 65535 {
 			add("%s: %d is not a valid port", name, port)
@@ -236,9 +243,9 @@ func (c *Config) Validate() error {
 	}
 	for iso, s := range c.Images.Attach {
 		switch s.Strategy {
-		case "", "linux-extract", "wimboot", "memdisk":
+		case "", "linux-extract", "wimboot", "memdisk", "iscsi":
 		default:
-			add("images.attach[%s].strategy: %q is not one of linux-extract, wimboot, memdisk", iso, s.Strategy)
+			add("images.attach[%s].strategy: %q is not one of linux-extract, wimboot, memdisk, iscsi", iso, s.Strategy)
 		}
 	}
 	if c.Alerts.WebhookURL != "" {

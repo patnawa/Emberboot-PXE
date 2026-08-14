@@ -414,3 +414,60 @@ func isISOName(name string) bool {
 
 // DiskFreeGB reports free space on the volume holding dir (diagnostics).
 func DiskFreeGB(dir string) (float64, error) { return diskFreeGB(dir) }
+
+// --- iSCSI target provider (iscsisrv.Provider) ---
+
+// OpenTarget resolves an IQN suffix to a Ready image's raw ISO. Each session
+// gets its own file handle so ISO removal never corrupts other sessions.
+func (m *Manager) OpenTarget(suffix string) (io.ReaderAt, int64, func(), error) {
+	m.mu.Lock()
+	var found *Image
+	for _, img := range m.byName {
+		if img.State == StateReady && sanitize(img.FileName) == suffix {
+			found = img
+			break
+		}
+	}
+	m.mu.Unlock()
+	if found == nil {
+		return nil, 0, nil, fmt.Errorf("no ready image for target %q", suffix)
+	}
+	f, err := m.OpenRaw(found.FileName)
+	if err != nil {
+		return nil, 0, nil, err
+	}
+	return f, found.SizeBytes, func() { f.Close() }, nil
+}
+
+// TargetSuffixes lists discovery-offerable targets (Ready, not disabled).
+func (m *Manager) TargetSuffixes() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for _, img := range m.byName {
+		if img.State == StateReady && !img.Disabled {
+			out = append(out, sanitize(img.FileName))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// sanitize mirrors iscsisrv.SanitizeSuffix without importing it (avoids a
+// dependency cycle); the two must stay in step — see images_iscsi_test.go.
+func sanitize(name string) string {
+	name = strings.ToLower(strings.TrimSuffix(strings.ToLower(name), ".iso"))
+	var b strings.Builder
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '.':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
+}
+
+// TargetSuffix exposes the IQN suffix for one image (script generation).
+func TargetSuffix(fileName string) string { return sanitize(fileName) }

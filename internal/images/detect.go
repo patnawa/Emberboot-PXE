@@ -12,7 +12,11 @@ type Strategy string
 const (
 	StrategyLinuxExtract Strategy = "linux-extract"
 	StrategyWimboot      Strategy = "wimboot"
-	StrategyMemdisk      Strategy = "memdisk" // iPXE sanboot: whole ISO into RAM
+	StrategyMemdisk      Strategy = "memdisk" // iPXE sanboot http: whole ISO into RAM
+	// StrategyISCSI serves the ISO as a virtual CD over the embedded iSCSI
+	// target: full media emulation, no RAM limit — the honest tier-iii
+	// (ADR-0003) for ISOs that cannot netboot any other way.
+	StrategyISCSI Strategy = "iscsi"
 )
 
 // BootPlan holds everything the HTTP boot-script generator needs, resolved
@@ -196,34 +200,33 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 		}, "openSUSE/SLES linuxrc detected; installer fetches the ISO over HTTP", nil
 	}
 
-	// Debian installer ISOs are explicitly not netbootable from the ISO's own
-	// initrd (cdrom-flavored d-i). Detect and explain rather than misboot.
+	// Debian installer ISOs cannot netboot from their own initrd (it only
+	// mounts local media) — exactly what the iSCSI virtual CD provides.
 	if h.exists("install.amd/vmlinuz") || h.exists("install.386/vmlinuz") {
-		return StrategyMemdisk, BootPlan{Family: "debian-installer", RAMLoadMB: mb(sizeBytes) + 512},
-			"Debian installer ISO: its initrd only mounts local media, so falling back to Memdisk " +
-				"(needs client RAM > ISO size); consider Debian netboot images or a preseed mirror instead", nil
+		return StrategyISCSI, BootPlan{Family: "debian-installer"},
+			"Debian installer ISO: served as a virtual CD over iSCSI (d-i cannot fetch ISOs over HTTP)", nil
 	}
 
-	// Proxmox VE: not netbootable as-shipped (its init expects the ISO to be
-	// concatenated into the initrd). Say so instead of misbooting.
+	// Proxmox VE: no netboot support in the ISO; iSCSI media emulation is
+	// the only in-place chance.
 	if h.exists("boot/linux26") {
-		return StrategyMemdisk, BootPlan{Family: "proxmox", RAMLoadMB: mb(sizeBytes) + 512},
-			"Proxmox VE ISO: Proxmox does not support direct netboot; trying Memdisk, which usually " +
-				"fails past the loader — install from USB or use the pve-iso-2-pxe method instead", nil
+		return StrategyISCSI, BootPlan{Family: "proxmox"},
+			"Proxmox VE ISO: served as a virtual CD over iSCSI (Proxmox has no direct netboot support)", nil
 	}
 
-	// Fallback: Memdisk (iPXE sanboot, whole ISO into RAM). A standalone EFI
-	// application in the ISO (memtest and similar tools) is chained directly
-	// on UEFI clients — no RAM limit, no sanboot flakiness.
+	// Fallback for everything unrecognized (BSDs, appliances, old tools):
+	// virtual CD over iSCSI — full media emulation, no RAM limit. A
+	// standalone EFI application (memtest-style) is still chained directly
+	// on UEFI, and sanboot-into-RAM remains the last resort in the script.
 	plan := BootPlan{Family: "unknown", RAMLoadMB: mb(sizeBytes) + 512}
-	reason := "unrecognized layout; falling back to Memdisk (whole ISO into client RAM via iPXE sanboot)"
+	reason := "unrecognized layout; served as a virtual CD over iSCSI (Memdisk as last resort)"
 	if sizeBytes < 128<<20 {
 		if efi, ok := h.firstExisting("EFI/BOOT/BOOTX64.EFI", "efi/boot/bootx64.efi"); ok {
 			plan.Files = map[string]string{"efi": efi}
 			reason += "; UEFI clients chain the ISO's standalone EFI application directly"
 		}
 	}
-	return StrategyMemdisk, plan, reason, nil
+	return StrategyISCSI, plan, reason, nil
 }
 
 // friendlyName derives a menu label from an ISO file name:

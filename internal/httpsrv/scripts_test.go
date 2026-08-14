@@ -180,6 +180,28 @@ func TestRAMGateRefusesSmallClients(t *testing.T) {
 	}
 }
 
+func TestISCSIScript(t *testing.T) {
+	img := readyImage("debian-12.5.0-amd64-netinst.iso", images.StrategyISCSI, images.BootPlan{Family: "debian-installer"})
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
+	want := "sanboot --keep iscsi:10.0.0.5::::iqn.2026-08.local.emberboot:debian-12.5.0-amd64-netinst"
+	if !strings.Contains(s, want) {
+		t.Errorf("iSCSI script must attach the virtual CD with --keep (iBFT for OS reattach); want %q in:\n%s", want, s)
+	}
+	if !strings.Contains(s, "sanboot "+testBase+"/iso/debian-12.5.0-amd64-netinst.iso") {
+		t.Errorf("RAM-load fallback missing:\n%s", s)
+	}
+}
+
+func TestISCSIScriptCustomPort(t *testing.T) {
+	cfg := testCfg(t)
+	cfg.Network.ISCSIPort = 13260
+	img := readyImage("x.iso", images.StrategyISCSI, images.BootPlan{Family: "unknown"})
+	s := imageScript(cfg, img, testMAC(t), nil, testBase, 0)
+	if !strings.Contains(s, "iscsi:10.0.0.5::13260:0:iqn.2026-08.local.emberboot:x") {
+		t.Errorf("custom iSCSI port must appear in the SAN URI:\n%s", s)
+	}
+}
+
 func TestMemdiskEFIChain(t *testing.T) {
 	img := readyImage("memtest.iso", images.StrategyMemdisk, images.BootPlan{
 		Family: "unknown", Files: map[string]string{"efi": "EFI/BOOT/BOOTX64.EFI"},

@@ -8,6 +8,7 @@ import (
 
 	"emberboot/internal/config"
 	"emberboot/internal/images"
+	"emberboot/internal/iscsisrv"
 	"emberboot/internal/rules"
 )
 
@@ -152,12 +153,38 @@ chain %s/boot.ipxe
 		b.WriteString("echo Loading whole ISO into RAM (needs RAM larger than the ISO)...\n")
 		fmt.Fprintf(&b, "sanboot %s || goto failed\n", isoURL)
 
+	case images.StrategyISCSI:
+		// Virtual CD over the embedded iSCSI target: full media emulation,
+		// no RAM limit. --keep registers the session in the iBFT so the
+		// booted OS can reattach to its install media.
+		if efi, ok := img.Plan.Files["efi"]; ok {
+			fmt.Fprintf(&b, "iseq ${platform} efi && chain %s/%s ||\n", content, efi)
+		}
+		b.WriteString("echo Attaching install media over iSCSI...\n")
+		fmt.Fprintf(&b, "sanboot --keep %s ||\n", iscsiURI(cfg, base, img.FileName))
+		b.WriteString("echo iSCSI attach failed - trying whole-ISO RAM load instead...\n")
+		fmt.Fprintf(&b, "sanboot %s || goto failed\n", isoURL)
+
 	default:
 		b.WriteString("echo No boot strategy for this image\ngoto failed\n")
 	}
 
 	fmt.Fprintf(&b, ":failed\necho Boot of this image failed.\nprompt Press any key to return to the menu\nchain %s/boot.ipxe\n", base)
 	return b.String()
+}
+
+// iscsiURI builds the iPXE SAN URI for an image's virtual-CD target:
+// iscsi:<server>:<protocol>:<port>:<lun>:<iqn> with empty defaults.
+func iscsiURI(cfg *config.Config, base, fileName string) string {
+	host := base
+	if u, err := url.Parse(base); err == nil && u.Host != "" {
+		host = u.Hostname()
+	}
+	iqn := iscsisrv.IQNPrefix + ":" + images.TargetSuffix(fileName)
+	if cfg.Network.ISCSIPort == 3260 {
+		return fmt.Sprintf("iscsi:%s::::%s", host, iqn)
+	}
+	return fmt.Sprintf("iscsi:%s::%d:0:%s", host, cfg.Network.ISCSIPort, iqn)
 }
 
 // answerArgs wires an Answer File into the kernel command line, per family.

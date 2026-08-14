@@ -160,17 +160,17 @@ func TestDetectAlpine(t *testing.T) {
 	}
 }
 
-func TestDetectProxmoxExplained(t *testing.T) {
+func TestDetectProxmoxServedOverISCSI(t *testing.T) {
 	h := makeISO(t, "boot/linux26", "boot/initrd.img")
 	strategy, plan, reason, err := detect(h, 1<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strategy != StrategyMemdisk || plan.Family != "proxmox" {
+	if strategy != StrategyISCSI || plan.Family != "proxmox" {
 		t.Fatalf("got %s/%s", strategy, plan.Family)
 	}
-	if !strings.Contains(reason, "does not support direct netboot") {
-		t.Errorf("proxmox must be explained honestly: %s", reason)
+	if !strings.Contains(reason, "iSCSI") {
+		t.Errorf("proxmox reason must mention the virtual CD: %s", reason)
 	}
 }
 
@@ -180,8 +180,22 @@ func TestDetectStandaloneEFITool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strategy != StrategyMemdisk || plan.Files["efi"] == "" {
+	if strategy != StrategyISCSI || plan.Files["efi"] == "" {
 		t.Fatalf("small EFI-app ISO should expose a chainable EFI: %s files=%v", strategy, plan.Files)
+	}
+}
+
+func TestDetectDebianInstallerServedOverISCSI(t *testing.T) {
+	h := makeISO(t, "install.amd/vmlinuz", "install.amd/initrd.gz")
+	strategy, plan, _, err := detect(h, 700<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy != StrategyISCSI || plan.Family != "debian-installer" {
+		t.Fatalf("got %s/%s", strategy, plan.Family)
+	}
+	if plan.RAMLoadMB != 0 {
+		t.Errorf("iSCSI strategy loads nothing into RAM, got %d", plan.RAMLoadMB)
 	}
 }
 
@@ -199,13 +213,13 @@ func TestDetectWindowsRAMAccounting(t *testing.T) {
 	}
 }
 
-func TestDetectFallbackMemdisk(t *testing.T) {
+func TestDetectFallbackISCSI(t *testing.T) {
 	h := makeISO(t, "some/random/file.txt")
 	strategy, plan, reason, err := detect(h, 100<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strategy != StrategyMemdisk || plan.Family != "unknown" {
+	if strategy != StrategyISCSI || plan.Family != "unknown" {
 		t.Fatalf("got %s/%s", strategy, plan.Family)
 	}
 	if reason == "" {

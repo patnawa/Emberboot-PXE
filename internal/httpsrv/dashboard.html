@@ -380,7 +380,7 @@ function imageDrawer(i){
       <div class="field"><label for="f-strat">Boot strategy</label>
         <select id="f-strat">
           <option value="">auto (detected)</option>
-          ${["linux-extract","wimboot","memdisk"].map(x=>`<option ${x===((S.cfgFull?.config?.images?.attach||{})[i.file_name]?.strategy||"")?"selected":""}>${x}</option>`).join("")}
+          ${["linux-extract","wimboot","memdisk","iscsi"].map(x=>`<option ${x===((S.cfgFull?.config?.images?.attach||{})[i.file_name]?.strategy||"")?"selected":""}>${x}</option>`).join("")}
         </select></div>
       <div class="field"><label for="f-args">Extra kernel arguments</label>
         <input type="text" id="f-args" value="${esc(i.extra_kernel_args||((S.cfgFull?.config?.images?.attach||{})[i.file_name]?.kernel_args||""))}"></div>
