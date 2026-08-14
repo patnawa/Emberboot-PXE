@@ -1,0 +1,8 @@
+/emberbootd
+/emberbootd.exe
+/dist/
+/data/
+/images/
+/answers/
+emberboot.yaml
+*.log

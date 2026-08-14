@@ -1,0 +1,67 @@
+# Emberboot configuration — this file plus the images folder is the entire source
+# of truth. It hot-reloads: invalid edits are rejected (alerted, shown in the
+# dashboard) while the last valid config keeps serving.
+
+site: bkk-hq
+
+network:
+  # proxy        — coexist with your existing DHCP server, zero changes to it
+  # options66-67 — your DHCP server points clients at us (works across VLANs
+  #                with DHCP relay / IP helpers)
+  dhcp_mode: proxy
+  # IP clients fetch from; leave empty to autodetect.
+  advertise_ip: ""
+  tftp_port: 69
+  http_port: 8090
+  # Dashboard/API listen address. Bind to a management VLAN IP to restrict it.
+  dashboard_bind: "0.0.0.0:8443"
+
+images:
+  dir: images
+  answers_dir: answers
+  min_free_gb: 20
+  # Optional per-ISO settings, keyed by file name:
+  attach:
+    ubuntu-24.04-live-server-amd64.iso:
+      display_name: "Ubuntu Server 24.04 LTS"
+      answer_file: ubuntu-autoinstall.yaml
+    Win11_24H2_English_x64.iso:
+      display_name: "Windows 11 24H2"
+      answer_file: autounattend.xml
+
+menu:
+  title: "Emberboot Network Boot — TSM"
+  timeout_seconds: 30
+
+security:
+  # false = unknown MACs get no boot service (lockdown)
+  allow_unknown_macs: true
+
+auth:
+  # bcrypt hash for dashboard login; generate with: emberbootd hash-password
+  admin_password_hash: ""
+  api_tokens: []
+
+alerts:
+  # Receives JSON alerts: crash-restart, image validation failed, boot failure
+  # spike, disk low, config rejected, rogue PXE server detected.
+  webhook_url: ""
+  failure_spike:
+    window_minutes: 10
+    threshold_percent: 20
+    min_sessions: 10
+
+sessions:
+  db_path: data/sessions.db   # disposable cache — safe to delete
+  retention_days: 90
+  max_size_mb: 512
+
+overrides:
+  # First match wins, top to bottom. Match by MAC glob or subnet.
+  - name: lab-vlan
+    subnet: 10.1.2.0/24
+    menu: [clonezilla-live.iso, ubuntu-24.04-live-server-amd64.iso]
+    answer_file: lab-wipe-autoinstall.yaml
+  # - name: block-guests
+  #   subnet: 10.9.0.0/16
+  #   deny: true
