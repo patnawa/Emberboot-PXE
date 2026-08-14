@@ -22,13 +22,26 @@ of dying mid-transfer.
 | **proxmox** | Proxmox VE | Virtual CD over iSCSI (Proxmox has no direct netboot support) | Reachable TCP 3260 |
 | **unknown (iSCSI virtual CD)** | BSDs (pfSense/OPNsense/FreeBSD), appliances, DOS/firmware utilities, anything unrecognized | Virtual CD over iSCSI, full media emulation. Small ISOs carrying a standalone EFI app (memtest86+ style) chain it directly on UEFI. Whole-ISO-into-RAM (`sanboot` http) remains the scripted last resort | Reachable TCP 3260; OS-side reattach support varies (see note) |
 
-**iSCSI reattach note**: iPXE's `--keep` registers the session in the iBFT.
-Bootloaders and kernels always read the virtual CD fine; whether the *OS
-installer* can keep using it after taking over the NIC varies (Debian d-i
-loads iSCSI support, BSD loaders read the whole kernel before takeover).
-When an installer loses its media mid-way, the fallback is the RAM-load
-path or a family-specific strategy. The dashboard's session timeline shows
-exactly how far each attempt got.
+**iSCSI reattach — what actually survives the OS taking over the NIC**
+(iPXE's `--keep` registers the session in the iBFT; the OS must re-login
+from that):
+
+- **Windows Setup: yes, proven.** WinPE's `wpeinit` reads the iBFT,
+  re-logs into the target, and the virtual DVD appears as a drive letter —
+  the full Setup GUI runs from it. Requirement: `boot.wim` must contain a
+  driver for the machine's NIC (slipstream with DISM if not). This makes
+  `iscsi` a deliberate **low-RAM alternative for Windows installs** — force
+  it per-image when clients lack the RAM for the wimboot injection path.
+- **Debian d-i: bootloader yes, installer usually no** — d-i's media
+  detection runs before iSCSI login. Its iBFT support targets *destination
+  disks*, not the install CD. Use Debian netboot images + mirror instead.
+- **Proxmox, FreeBSD/pfSense/OPNsense installers: no** — their install
+  initrds/loaders have no iBFT reattach. The loader and kernel still boot
+  from the virtual CD; the installer then stalls looking for media.
+
+When the second stage loses its media, the script's RAM-load fallback or a
+family-specific strategy is the answer. The dashboard's session timeline
+shows exactly how far each attempt got.
 
 ## Firmware
 

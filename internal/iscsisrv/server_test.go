@@ -200,6 +200,35 @@ func TestReadTOC(t *testing.T) {
 	}
 }
 
+func TestOSInitiatorCommands(t *testing.T) {
+	in, _ := startServer(t)
+	if resp := in.login("Normal", IQNPrefix+":test-iso"); resp.hdr[36] != 0 {
+		t.Fatal("login failed")
+	}
+	// GET CONFIGURATION must report DVD-ROM (0x0010) as the current profile.
+	data, status, _ := in.scsi([]byte{0x46, 0, 0, 0, 0, 0, 0, 0, 32, 0}, 32)
+	if status != statusGood || binary.BigEndian.Uint16(data[6:8]) != 0x0010 {
+		t.Errorf("GET CONFIGURATION current profile: status %d data % x", status, data[:8])
+	}
+	// MODE SENSE(10) for page 0x2A: MM capabilities with no write bits.
+	ms, status, _ := in.scsi([]byte{0x5a, 0, 0x2a, 0, 0, 0, 0, 0, 64, 0}, 64)
+	if status != statusGood || len(ms) < 10 || ms[8]&0x3f != 0x2a {
+		t.Fatalf("MODE SENSE 2A: status %d data % x", status, ms)
+	}
+	if ms[8+3] != 0 {
+		t.Error("write-capability bits must be clear on a read-only unit")
+	}
+	// Writes are refused as DATA PROTECT, not invalid-opcode.
+	_, status, sense := in.scsi([]byte{0x2a, 0, 0, 0, 0, 0, 0, 0, 1, 0}, 0)
+	if status != statusCheckCondition || len(sense) < 14 || sense[2]&0x0f != 0x07 || sense[12] != 0x27 {
+		t.Errorf("WRITE(10) must fail write-protected: status %d sense % x", status, sense)
+	}
+	// GET EVENT STATUS: polite "no event" instead of an error.
+	if _, status, _ = in.scsi([]byte{0x4a, 1, 0, 0, 0x10, 0, 0, 0, 8, 0}, 8); status != statusGood {
+		t.Errorf("GET EVENT STATUS should succeed, got %d", status)
+	}
+}
+
 func TestUnknownTargetRefused(t *testing.T) {
 	in, _ := startServer(t)
 	resp := in.login("Normal", IQNPrefix+":nope")

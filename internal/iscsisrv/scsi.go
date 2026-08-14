@@ -68,12 +68,16 @@ func (l *lun) handleCDB(cdb []byte) scsiResult {
 		return good(s)
 	case 0x12: // INQUIRY
 		return l.inquiry(cdb)
-	case 0x1a: // MODE SENSE(6): header only, no pages
-		return good([]byte{3, 0, 0, 0})
+	case 0x1a: // MODE SENSE(6)
+		return l.modeSense(cdb[2], false)
 	case 0x5a: // MODE SENSE(10)
-		return good([]byte{0, 6, 0, 0, 0, 0, 0, 0})
-	case 0x1b, 0x1e, 0xbb: // START STOP / PREVENT ALLOW REMOVAL / SET CD SPEED
+		return l.modeSense(cdb[2], true)
+	case 0x1b, 0x1e, 0x35, 0xbb: // START STOP / PREVENT ALLOW / SYNC CACHE / SET CD SPEED
 		return good(nil)
+	case 0x4a: // GET EVENT STATUS NOTIFICATION: "no event available"
+		return good([]byte{0, 2, 0x80, 0})
+	case 0x0a, 0x2a, 0x8a, 0xaa: // WRITE(6/10/16/12): read-only medium
+		return check(0x07 /* DATA PROTECT */, 0x27 /* write protected */, 0)
 	case 0x25: // READ CAPACITY(10)
 		out := make([]byte, 8)
 		binary.BigEndian.PutUint32(out[0:4], l.blocks-1)
@@ -106,11 +110,18 @@ func (l *lun) handleCDB(cdb []byte) scsiResult {
 		return l.read(binary.BigEndian.Uint64(cdb[2:10]), binary.BigEndian.Uint32(cdb[10:14]))
 	case 0x43: // READ TOC/PMA/ATIP
 		return l.readTOC(cdb)
-	case 0x46: // GET CONFIGURATION: current profile CD-ROM
-		out := make([]byte, 8)
-		binary.BigEndian.PutUint32(out[0:4], 4) // data length
-		binary.BigEndian.PutUint16(out[6:8], 0x0008)
-		return good(out)
+	case 0x46: // GET CONFIGURATION: DVD-ROM current profile (what tgt serves
+		// and what Windows/Linux initiators expect for an ISO-backed unit),
+		// plus a Profile List feature naming DVD-ROM (current) and CD-ROM.
+		feat := []byte{
+			0x00, 0x00, 0x03, 8, // feature 0000 Profile List, current, 8 bytes
+			0x00, 0x10, 0x01, 0, // profile 0x0010 DVD-ROM, currentP
+			0x00, 0x08, 0x00, 0, // profile 0x0008 CD-ROM
+		}
+		out := make([]byte, 8, 8+len(feat))
+		binary.BigEndian.PutUint32(out[0:4], uint32(4+len(feat)))
+		binary.BigEndian.PutUint16(out[6:8], 0x0010)
+		return good(append(out, feat...))
 	case 0x51: // READ DISC INFORMATION: complete single-session disc
 		out := make([]byte, 34)
 		out[1] = 32   // length
@@ -141,6 +152,40 @@ func (l *lun) read(lba uint64, count uint32) scsiResult {
 		return check(0x03 /* MEDIUM ERROR */, 0x11, 0)
 	}
 	return good(buf)
+}
+
+// mmPage2A is the MM capabilities mode page: every read bit set, every
+// write bit clear — Windows' cdrom.sys asks for this page while classifying
+// the unit.
+func mmPage2A() []byte {
+	p := make([]byte, 2+26)
+	p[0] = 0x2a
+	p[1] = 26
+	p[2] = 0x3f // reads: CD-R/CD-RW/Method2/DVD-ROM/DVD-R/DVD-RAM
+	p[3] = 0x00 // writes: none
+	p[4] = 0x71 // multisession, mode2 form1/2, audio play
+	p[5] = 0xff
+	p[6] = 0x2f // eject, tray loader, lock
+	return p
+}
+
+// modeSense answers MODE SENSE(6/10). Page 0x2A and the all-pages request
+// return the MM capabilities page; anything else gets a bare header, which
+// initiators tolerate (proven by tgt's gaps).
+func (l *lun) modeSense(pageAndPC byte, ten bool) scsiResult {
+	var pages []byte
+	switch pageAndPC & 0x3f {
+	case 0x2a, 0x3f:
+		pages = mmPage2A()
+	}
+	if ten {
+		out := make([]byte, 8, 8+len(pages))
+		binary.BigEndian.PutUint16(out[0:2], uint16(6+len(pages)))
+		return good(append(out, pages...))
+	}
+	out := make([]byte, 4, 4+len(pages))
+	out[0] = byte(3 + len(pages))
+	return good(append(out, pages...))
 }
 
 // readTOC answers formats 0 (TOC) and 1 (session info) for a single-track

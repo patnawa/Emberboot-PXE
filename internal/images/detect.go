@@ -204,14 +204,19 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 	// mounts local media) — exactly what the iSCSI virtual CD provides.
 	if h.exists("install.amd/vmlinuz") || h.exists("install.386/vmlinuz") {
 		return StrategyISCSI, BootPlan{Family: "debian-installer"},
-			"Debian installer ISO: served as a virtual CD over iSCSI (d-i cannot fetch ISOs over HTTP)", nil
+			"Debian installer ISO: served as a virtual CD over iSCSI. The bootloader stage works; " +
+				"d-i itself may still fail to find its CD (its media detection runs before iSCSI login) — " +
+				"Debian netboot images with a mirror are the reliable route", nil
 	}
 
 	// Proxmox VE: no netboot support in the ISO; iSCSI media emulation is
-	// the only in-place chance.
+	// the only in-place chance, and its installer initrd has no iSCSI
+	// support to reattach with.
 	if h.exists("boot/linux26") {
 		return StrategyISCSI, BootPlan{Family: "proxmox"},
-			"Proxmox VE ISO: served as a virtual CD over iSCSI (Proxmox has no direct netboot support)", nil
+			"Proxmox VE ISO: served as a virtual CD over iSCSI. The loader boots, but the Proxmox " +
+				"installer cannot reattach to iSCSI media — expect it to stall; USB install remains the " +
+				"supported route", nil
 	}
 
 	// Fallback for everything unrecognized (BSDs, appliances, old tools):
