@@ -371,6 +371,10 @@ function imageDrawer(i){
     <p class="dim" style="font-size:.82rem;margin-bottom:1rem">${esc(i.reason)}</p>
     ${p.kernel?`<pre class="code">kernel  ${esc(p.kernel)}\n${(p.initrds||[]).map(x=>"initrd  "+esc(x)).join("\n")}\nargs    ${esc(p.args||"")}</pre>`:""}
     ${p.files?`<pre class="code">${esc(Object.entries(p.files).map(([k,v])=>k.padEnd(10)+v).join("\n"))}</pre>`:""}
+    ${i.iscsi_target&&i.state==="ready"?`<div class="eyebrow">Virtual CD over iSCSI</div>
+    <p class="dim" style="font-size:.8rem;margin-bottom:.5rem">Every ready image is also served as a read-only iSCSI CD — usable from any initiator, or as this image's boot method by setting the strategy below to <span class="mono">iscsi</span> (a proven low-RAM path for Windows installs).</p>
+    <pre class="code">IQN      ${esc(i.iscsi_target)}\nPortal   ${esc(S.health?.advertise_ip||"")}:${S.health?.iscsi_port||3260}\nsanboot  ${esc(sanbootURI(i))}</pre>
+    <div class="copyrow"><button class="btn sm" id="copy-iscsi">Copy sanboot URI</button></div>`:""}
     <div class="eyebrow">Settings</div>
     <div class="field"><label for="f-dn">Menu label</label><input type="text" id="f-dn" value="${esc(i.display_name)}"></div>
     <div class="field"><label for="f-ans">Answer file (unattended install)</label>
@@ -389,6 +393,7 @@ function imageDrawer(i){
     <div class="actions">
       <button class="btn primary" id="f-save">Save image settings</button>
     </div>`);
+  $("#copy-iscsi")?.addEventListener("click",()=>copy(sanbootURI(i),"sanboot URI"));
   $("#f-save").addEventListener("click",async()=>{
     const attach={};
     const dn=$("#f-dn").value.trim();if(dn&&dn!==friendly(i.file_name))attach.display_name=dn;
@@ -404,6 +409,10 @@ function imageDrawer(i){
   });
 }
 function friendly(f){return f.replace(/\.iso$/i,"").replace(/[_-]/g," ")}
+function sanbootURI(i){
+  const ip=S.health?.advertise_ip||"<server>",port=S.health?.iscsi_port||3260;
+  return port===3260?`iscsi:${ip}::::${i.iscsi_target}`:`iscsi:${ip}::${port}:0:${i.iscsi_target}`;
+}
 
 /* ── sessions ───────────────────────────────────────────────────────── */
 views.sessions=function(){
@@ -724,6 +733,9 @@ views.config=function(){
           <input type="text" id="n-adv" value="${esc(net.advertise_ip||"")}" placeholder="${esc(h.advertise_ip||"")}"></div>
       </div>
       <div class="actions" style="margin-top:0;margin-bottom:.9rem"><button class="btn" id="n-save">Save network settings</button></div>
+      <dl class="kv" style="margin-bottom:.6rem">
+        <dt>iSCSI portal</dt><dd class="mono">${esc(h.advertise_ip||"–")}:${h.iscsi_port||3260} <span class="faint">— every ready image doubles as a virtual CD; the IQN and sanboot URI are in each image's detail drawer</span></dd>
+      </dl>
       <p class="dim" style="font-size:.82rem;margin-bottom:.5rem">For DHCP servers on relayed VLANs (or options66-67 mode), configure:</p>
       <pre class="code">Option 66 (TFTP server) : ${esc(h.advertise_ip||"")}
 Option 67 (boot file)   : undionly.kpxe   ← BIOS clients

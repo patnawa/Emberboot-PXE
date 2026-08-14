@@ -20,6 +20,7 @@ import (
 
 	"emberboot/internal/alerts"
 	"emberboot/internal/config"
+	"emberboot/internal/iscsisrv"
 	"emberboot/internal/metrics"
 )
 
@@ -47,6 +48,9 @@ type Image struct {
 	Disabled bool `json:"disabled"`
 	// AnswerFile from config images.attach[..].answer_file ("" = none).
 	AnswerFile string `json:"answer_file,omitempty"`
+	// ISCSITarget is this image's virtual-CD IQN — every Ready image is
+	// also reachable over the embedded iSCSI target, whatever its strategy.
+	ISCSITarget string `json:"iscsi_target,omitempty"`
 	// ExtraKernelArgs from config images.attach[..].kernel_args.
 	ExtraKernelArgs string `json:"extra_kernel_args,omitempty"`
 }
@@ -305,6 +309,7 @@ func (m *Manager) applySettings(img *Image) *Image {
 	img.Disabled = s.Disabled
 	img.AnswerFile = s.AnswerFile
 	img.ExtraKernelArgs = s.KernelArgs
+	img.ISCSITarget = iscsisrv.IQNPrefix + ":" + iscsisrv.SanitizeSuffix(img.FileName)
 	return img
 }
 
@@ -423,7 +428,7 @@ func (m *Manager) OpenTarget(suffix string) (io.ReaderAt, int64, func(), error) 
 	m.mu.Lock()
 	var found *Image
 	for _, img := range m.byName {
-		if img.State == StateReady && sanitize(img.FileName) == suffix {
+		if img.State == StateReady && iscsisrv.SanitizeSuffix(img.FileName) == suffix {
 			found = img
 			break
 		}
@@ -446,28 +451,12 @@ func (m *Manager) TargetSuffixes() []string {
 	var out []string
 	for _, img := range m.byName {
 		if img.State == StateReady && !img.Disabled {
-			out = append(out, sanitize(img.FileName))
+			out = append(out, iscsisrv.SanitizeSuffix(img.FileName))
 		}
 	}
 	sort.Strings(out)
 	return out
 }
 
-// sanitize mirrors iscsisrv.SanitizeSuffix without importing it (avoids a
-// dependency cycle); the two must stay in step — see images_iscsi_test.go.
-func sanitize(name string) string {
-	name = strings.ToLower(strings.TrimSuffix(strings.ToLower(name), ".iso"))
-	var b strings.Builder
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '.':
-			b.WriteRune(r)
-		default:
-			b.WriteByte('-')
-		}
-	}
-	return b.String()
-}
-
 // TargetSuffix exposes the IQN suffix for one image (script generation).
-func TargetSuffix(fileName string) string { return sanitize(fileName) }
+func TargetSuffix(fileName string) string { return iscsisrv.SanitizeSuffix(fileName) }

@@ -162,6 +162,7 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"dhcp_mode":       string(cfg.Network.DHCPMode),
 		"tftp_port":       cfg.Network.TFTPPort,
 		"http_port":       cfg.Network.HTTPPort,
+		"iscsi_port":      cfg.Network.ISCSIPort,
 		"auth_configured": cfg.Auth.AdminPasswordHash != "" || len(cfg.Auth.APITokens) > 0,
 	})
 }
