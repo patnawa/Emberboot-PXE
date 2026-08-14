@@ -207,6 +207,7 @@ func run() error {
 		api := httpsrv.NewAPI(httpsrv.APIDeps{
 			Log: log, Cfg: mgr, Images: imgMgr, Sessions: store, Alerts: notifier,
 			Metrics: m, Version: version, StartTime: start,
+			AdvertiseIP: advertise.String(), HTTPBase: httpBase,
 		}, bind)
 		go func() { errc <- fmt.Errorf("dashboard: %w", api.Serve()) }()
 		defer api.Close()

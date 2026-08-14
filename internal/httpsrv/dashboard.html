@@ -3,118 +3,514 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Emberboot</title>
 <style>
-:root{--bg:#0f1419;--panel:#171e26;--line:#232d38;--fg:#d8e1ea;--dim:#7d8fa1;--ok:#3fb96f;--warn:#e0a437;--bad:#e05d5d;--accent:#e07b39}
+/* ── Emberboot console: warm iron surfaces, ember accent ─────────────── */
+:root{
+  --page:#100e0b; --surface:#191612; --raised:#211d17; --hairline:#2d2820;
+  --ink:#ece5da; --ink-2:#a89d8d; --ink-3:#6f665a;
+  --ember:#e8722a; --ember-soft:rgba(232,114,42,.14);
+  --ok:#0ca30c; --warn:#fab219; --bad:#d03b3b;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,Menlo,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
 *{box-sizing:border-box;margin:0}
-body{background:var(--bg);color:var(--fg);font:14px/1.5 "Segoe UI",system-ui,sans-serif;padding:1.2rem 1.6rem}
-h1{font-size:1.15rem;display:flex;align-items:center;gap:.55rem;margin-bottom:1rem}
-h1 .flame{color:var(--accent)}
-h1 small{color:var(--dim);font-weight:400;font-size:.8rem}
-h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:1.4rem 0 .5rem}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.7rem}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem}
-.card .v{font-size:1.35rem;font-weight:600}
-.card .k{color:var(--dim);font-size:.75rem}
-table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-th,td{text-align:left;padding:.45rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--dim);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em}
+html{color-scheme:dark}
+body{background:var(--page);color:var(--ink);font:14px/1.5 var(--sans);min-height:100vh}
+button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+:focus-visible{outline:2px solid var(--ember);outline-offset:2px;border-radius:4px}
+@media (prefers-reduced-motion: reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
+
+/* layout */
+.app{display:grid;grid-template-columns:208px 1fr;min-height:100vh}
+.side{border-right:1px solid var(--hairline);padding:1.1rem .9rem;display:flex;flex-direction:column;gap:1.4rem;position:sticky;top:0;height:100vh}
+.brand{display:flex;align-items:center;gap:.55rem;padding:0 .35rem}
+.brand svg{flex:none}
+.brand b{font-size:1rem;letter-spacing:.01em}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav a{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:7px;color:var(--ink-2);text-decoration:none;font-weight:500}
+.nav a svg{flex:none;opacity:.8}
+.nav a:hover{background:var(--surface);color:var(--ink)}
+.nav a.on{background:var(--ember-soft);color:var(--ember)}
+.side-foot{margin-top:auto;padding:0 .35rem;color:var(--ink-3);font:.72rem var(--mono)}
+.main{min-width:0;padding:1.2rem 1.8rem 3rem}
+.topbar{display:flex;align-items:center;gap:1rem;padding-bottom:1rem;border-bottom:1px solid var(--hairline);margin-bottom:1.3rem}
+.topbar h1{font-size:1.1rem;font-weight:600}
+.topbar .spacer{flex:1}
+.pill{display:inline-flex;align-items:center;gap:.45rem;background:var(--surface);border:1px solid var(--hairline);border-radius:99px;padding:.25rem .8rem;font-size:.78rem;color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.dot.down{background:var(--bad)}
+.pill code{font-family:var(--mono);color:var(--ink)}
+
+/* generic */
+.eyebrow{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3);margin:1.6rem 0 .6rem}
+.panel{background:var(--surface);border:1px solid var(--hairline);border-radius:10px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem}
+.card{background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:.8rem 1rem}
+.card .v{font-size:1.5rem;font-weight:650;letter-spacing:-.01em}
+.card .k{color:var(--ink-2);font-size:.76rem;margin-top:.1rem}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:.5rem .8rem;border-bottom:1px solid var(--hairline);vertical-align:middle}
+th{color:var(--ink-3);font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:600}
 tr:last-child td{border-bottom:none}
-tbody tr.sess{cursor:pointer}
-tbody tr.sess:hover{background:#1c2530}
-.chip{display:inline-block;padding:.05rem .5rem;border-radius:99px;font-size:.72rem;font-weight:600}
-.chip.ready,.chip.completed{background:rgba(63,185,111,.15);color:var(--ok)}
-.chip.validating,.chip.inprogress{background:rgba(224,164,55,.15);color:var(--warn)}
-.chip.invalid,.chip.failed,.chip.stalled{background:rgba(224,93,93,.15);color:var(--bad)}
-.dim{color:var(--dim)}
-.reason{color:var(--dim);font-size:.78rem;max-width:34rem}
-#cfgbar{display:none;background:rgba(224,93,93,.12);border:1px solid var(--bad);color:var(--bad);border-radius:8px;padding:.6rem .9rem;margin-bottom:1rem;white-space:pre-wrap}
-#timeline{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55)}
-#timeline .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;max-width:44rem;margin:8vh auto;padding:1rem 1.3rem;max-height:75vh;overflow:auto}
-#timeline h3{font-size:.95rem;margin-bottom:.6rem}
-#timeline .ev{display:flex;gap:.8rem;padding:.25rem 0;border-bottom:1px dashed var(--line)}
-#timeline .ev .t{color:var(--dim);white-space:nowrap;font-variant-numeric:tabular-nums}
-#timeline .ev .s{min-width:5.2rem;color:var(--accent)}
-footer{margin-top:1.6rem;color:var(--dim);font-size:.75rem}
-@media (prefers-color-scheme: light){:root{--bg:#f4f6f8;--panel:#fff;--line:#dde3ea;--fg:#1d2733;--dim:#65788c}}
+tr.row{cursor:pointer}
+tr.row:hover td{background:var(--raised)}
+.mono{font-family:var(--mono);font-size:.82rem}
+.dim{color:var(--ink-2)}
+.faint{color:var(--ink-3)}
+.chip{display:inline-flex;align-items:center;gap:.35rem;padding:.06rem .55rem;border-radius:99px;font-size:.72rem;font-weight:600;white-space:nowrap}
+.chip.ready,.chip.completed{background:rgba(12,163,12,.13);color:#4cc44c}
+.chip.validating,.chip.active,.chip.stalled{background:rgba(250,178,25,.12);color:var(--warn)}
+.chip.invalid,.chip.failed{background:rgba(208,59,59,.15);color:#e46a6a}
+.chip.plain{background:var(--raised);color:var(--ink-2)}
+.empty{padding:2.2rem 1rem;text-align:center;color:var(--ink-2)}
+.empty b{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:.45rem;background:var(--raised);border:1px solid var(--hairline);border-radius:8px;padding:.45rem .9rem;font-weight:600;font-size:.82rem}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--ember);border-color:var(--ember);color:#180d05}
+.btn.primary:hover{filter:brightness(1.08)}
+
+/* boot fuse — the pipeline every PXE boot follows */
+.fuse{display:inline-flex;align-items:center}
+.fuse i{width:7px;height:7px;border-radius:50%;background:var(--hairline);flex:none}
+.fuse i.lit{background:var(--ember)}
+.fuse i.end.ok{background:var(--ok)}
+.fuse i.end.bad{background:var(--bad)}
+.fuse i.end.warn{background:var(--warn)}
+.fuse s{width:12px;height:1px;background:var(--hairline);flex:none;text-decoration:none}
+.fuse s.lit{background:var(--ember)}
+
+/* chart */
+.chartwrap{position:relative;padding:1rem 1.1rem 0.6rem}
+.legend{display:flex;gap:1.1rem;padding:.2rem 1.1rem .8rem;font-size:.76rem;color:var(--ink-2)}
+.legend b{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:.4rem}
+.tip{position:absolute;pointer-events:none;background:var(--raised);border:1px solid var(--hairline);border-radius:8px;padding:.5rem .7rem;font-size:.76rem;display:none;z-index:5;box-shadow:0 6px 20px rgba(0,0,0,.45);min-width:9rem}
+.tip .h{color:var(--ink-3);font-family:var(--mono);margin-bottom:.25rem}
+.tip .r{display:flex;justify-content:space-between;gap:1rem}
+.tip .r b{font-weight:400}
+
+/* toolbar (sessions) */
+.toolbar{display:flex;gap:.6rem;align-items:center;margin-bottom:.9rem;flex-wrap:wrap}
+.search{background:var(--surface);border:1px solid var(--hairline);border-radius:8px;color:var(--ink);padding:.45rem .8rem;font:.82rem var(--mono);width:16rem}
+.search::placeholder{color:var(--ink-3);font-family:var(--sans)}
+.seg{display:inline-flex;background:var(--surface);border:1px solid var(--hairline);border-radius:8px;overflow:hidden}
+.seg button{padding:.4rem .8rem;font-size:.78rem;font-weight:600;color:var(--ink-2)}
+.seg button.on{background:var(--ember-soft);color:var(--ember)}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(8,6,4,.6);opacity:0;pointer-events:none;transition:opacity .16s;z-index:20}
+.scrim.open{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);background:var(--surface);border-left:1px solid var(--hairline);transform:translateX(102%);transition:transform .16s ease-out;z-index:21;display:flex;flex-direction:column}
+.drawer.open{transform:none}
+.drawer-h{display:flex;align-items:center;gap:.8rem;padding:1rem 1.2rem;border-bottom:1px solid var(--hairline)}
+.drawer-h h2{font-size:.95rem;min-width:0;overflow-wrap:anywhere}
+.drawer-h button{margin-left:auto;color:var(--ink-2);font-size:1.1rem;padding:.2rem .5rem}
+.drawer-b{overflow-y:auto;padding:1rem 1.2rem 2rem}
+.kv{display:grid;grid-template-columns:8.5rem 1fr;gap:.35rem .8rem;font-size:.82rem;margin-bottom:1rem}
+.kv dt{color:var(--ink-3)}
+.kv dd{overflow-wrap:anywhere}
+pre.code{background:var(--page);border:1px solid var(--hairline);border-radius:8px;padding:.7rem .9rem;font:.78rem/1.55 var(--mono);overflow-x:auto;white-space:pre}
+.copyrow{display:flex;justify-content:flex-end;margin:.4rem 0 1rem}
+.tl{border-left:2px solid var(--hairline);margin:.4rem 0 0 .4rem;padding-left:1.1rem;display:flex;flex-direction:column;gap:.75rem}
+.tl .e{position:relative}
+.tl .e::before{content:"";position:absolute;left:calc(-1.1rem - 6px);top:.35rem;width:8px;height:8px;border-radius:50%;background:var(--ember)}
+.tl .e.term-ok::before{background:var(--ok)}
+.tl .e.term-bad::before{background:var(--bad)}
+.tl .meta{font:.72rem var(--mono);color:var(--ink-3)}
+.tl .stage{font-weight:600;font-size:.78rem;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin-right:.5rem}
+
+/* toast */
+.toast{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--raised);border:1px solid var(--hairline);border-left:3px solid var(--ok);border-radius:8px;padding:.7rem 1rem;font-size:.82rem;z-index:30;display:none;max-width:26rem}
+.toast.err{border-left-color:var(--bad)}
+
+/* banner */
+.banner{display:none;background:rgba(208,59,59,.1);border:1px solid var(--bad);border-radius:10px;padding:.8rem 1rem;margin-bottom:1.2rem}
+.banner b{color:#e46a6a}
+.banner pre{margin-top:.4rem;font:.76rem/1.5 var(--mono);white-space:pre-wrap;color:var(--ink-2)}
+
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .side{position:static;height:auto;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--hairline)}
+  .nav{flex-direction:row;flex-wrap:wrap}
+  .side-foot{display:none}
+  .main{padding:1rem}
+}
 </style>
 </head>
 <body>
-<h1><span class="flame">&#x1F525;</span> Emberboot <small id="meta"></small></h1>
-<div id="cfgbar"></div>
-<div class="cards">
-  <div class="card"><div class="v" id="c-images">–</div><div class="k">Images ready</div></div>
-  <div class="card"><div class="v" id="c-active">–</div><div class="k">Active boot sessions</div></div>
-  <div class="card"><div class="v" id="c-alerts">–</div><div class="k">Alerts (recent)</div></div>
-  <div class="card"><div class="v" id="c-uptime">–</div><div class="k">Uptime</div></div>
+<div class="app">
+  <aside class="side">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2c1 4-4 5.5-4 10a4 4 0 0 0 8 0c0-2-1-3.2-1.6-4.4C16.5 8.6 19 10.8 19 14a7 7 0 1 1-14 0C5 8 11 6.5 12 2z" fill="#e8722a"/>
+        <path d="M12 12c.5 1.8-1.6 2.3-1.6 4.2a1.9 1.9 0 1 0 3.8 0c0-1.9-1.7-2.4-2.2-4.2z" fill="#100e0b" opacity=".55"/>
+      </svg>
+      <b>Emberboot</b>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#overview" data-view="overview"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1"/></svg>Overview</a>
+      <a href="#images" data-view="images"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><circle cx="8" cy="8" r="1.6"/></svg>Images</a>
+      <a href="#sessions" data-view="sessions"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/></svg>Boot sessions</a>
+      <a href="#alerts" data-view="alerts"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a4 4 0 0 1 4 4c0 3 1 4 1.5 4.5h-11C3 10 4 9 4 6a4 4 0 0 1 4-4z"/><path d="M6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg>Alerts</a>
+      <a href="#config" data-view="config"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4.5h8M12.5 4.5H14M2 11.5h3M7.5 11.5H14"/><circle cx="10.5" cy="4.5" r="1.8"/><circle cx="5.5" cy="11.5" r="1.8"/></svg>Config</a>
+    </nav>
+    <div class="side-foot" id="foot">–</div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1 id="view-title">Overview</h1>
+      <span class="spacer"></span>
+      <span class="pill"><span class="dot" id="live-dot"></span><span id="live-text">connecting…</span></span>
+      <span class="pill">site <code id="site">–</code></span>
+      <span class="pill">up <code id="uptime">–</code></span>
+    </div>
+    <div class="banner" id="cfg-banner">
+      <b>Config file rejected — still serving the last good configuration.</b>
+      <pre id="cfg-error"></pre>
+    </div>
+    <div id="view"></div>
+  </main>
 </div>
 
-<h2>Images</h2>
-<table><thead><tr><th>Image</th><th>State</th><th>Strategy</th><th>Family</th><th>Size</th><th>Detail</th></tr></thead>
-<tbody id="images"></tbody></table>
-
-<h2>Boot sessions</h2>
-<table><thead><tr><th>Started</th><th>MAC</th><th>IP</th><th>Firmware</th><th>Image</th><th>Result</th></tr></thead>
-<tbody id="sessions"></tbody></table>
-
-<h2>Alerts</h2>
-<table><thead><tr><th>Time</th><th>Kind</th><th>Message</th></tr></thead>
-<tbody id="alerts"></tbody></table>
-
-<div id="timeline" onclick="this.style.display='none'">
-  <div class="box" onclick="event.stopPropagation()">
-    <h3 id="tl-title"></h3>
-    <div id="tl-events"></div>
-  </div>
-</div>
-
-<footer>Read-mostly ops dashboard — configuration lives in emberboot.yaml (hot-reloaded, last-known-good). Auto-refreshes every 5s.</footer>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+  <div class="drawer-h"><h2 id="drawer-title"></h2><button id="drawer-x" aria-label="Close">✕</button></div>
+  <div class="drawer-b" id="drawer-body"></div>
+</aside>
+<div class="toast" id="toast"></div>
 
 <script>
 "use strict";
-const $=id=>document.getElementById(id);
-const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const fmtSize=b=>b>=1e9?(b/1e9).toFixed(1)+" GB":b>=1e6?(b/1e6).toFixed(0)+" MB":Math.round(b/1e3)+" kB";
-const fmtT=s=>new Date(s).toLocaleString();
-const fmtUp=s=>s>=86400?Math.floor(s/86400)+"d "+Math.floor(s%86400/3600)+"h":s>=3600?Math.floor(s/3600)+"h "+Math.floor(s%3600/60)+"m":Math.floor(s/60)+"m";
-async function j(u){const r=await fetch(u);if(!r.ok)throw new Error(u+": "+r.status);return r.json()}
-function chip(v){return `<span class="chip ${esc(String(v||"in progress").replace(" ",""))}">${esc(v||"in progress")}</span>`}
+/* ── tiny helpers ───────────────────────────────────────────────────── */
+const $=s=>document.querySelector(s);
+const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtSize=b=>b>=1e9?(b/1e9).toFixed(1)+" GB":b>=1e6?(b/1e6).toFixed(0)+" MB":Math.round((b||0)/1e3)+" kB";
+const fmtT=s=>new Date(s).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+const fmtClock=s=>new Date(s).toLocaleTimeString([], {hour12:false});
+const fmtUp=s=>s>=86400?`${Math.floor(s/86400)}d ${Math.floor(s%86400/3600)}h`:s>=3600?`${Math.floor(s/3600)}h ${Math.floor(s%3600/60)}m`:`${Math.floor(s/60)}m ${s%60}s`;
+async function j(u,opt){const r=await fetch(u,opt);if(!r.ok)throw new Error(`${u} → ${r.status}`);return r.json()}
+function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast"+(err?" err":"");t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",4000)}
+function copy(text,label){navigator.clipboard?.writeText(text).then(()=>toast(label+" copied"),()=>toast("Copy failed — select the text manually",true))}
 
+/* ── state ──────────────────────────────────────────────────────────── */
+const S={view:"overview",health:null,images:[],sessions:[],alerts:[],activity:[],config:null,
+        q:"",filter:"all",connected:false};
+
+/* ── data refresh (5s, paused while tab is hidden) ──────────────────── */
 async function refresh(){
   try{
-    const [h,imgs,sess,al,cfg]=await Promise.all([j("/api/health"),j("/api/images"),j("/api/sessions?limit=60"),j("/api/alerts"),j("/api/config")]);
-    $("meta").textContent=`site ${h.site} · ${h.version}`;
-    $("c-images").textContent=imgs.filter(i=>i.state==="ready").length+" / "+imgs.length;
-    $("c-active").textContent=h.active_sessions;
-    $("c-alerts").textContent=al.length;
-    $("c-uptime").textContent=fmtUp(h.uptime_seconds);
-    const bar=$("cfgbar");
-    if(cfg.rejected){bar.style.display="block";bar.textContent="Config file REJECTED — still serving last known good.\n"+cfg.rejected}
-    else bar.style.display="none";
-    $("images").innerHTML=imgs.map(i=>`<tr>
-      <td>${esc(i.display_name)}${i.disabled?' <span class="dim">(disabled)</span>':""}<div class="dim">${esc(i.file_name)}</div></td>
-      <td>${chip(i.state)}</td><td>${esc(i.strategy||"–")}</td><td>${esc(i.plan?.family||"–")}</td>
-      <td>${fmtSize(i.size_bytes)}</td><td class="reason">${esc(i.reason)}</td></tr>`).join("")
-      ||`<tr><td colspan="6" class="dim">No ISOs found — drop one into the images folder.</td></tr>`;
-    $("sessions").innerHTML=sess.map(s=>`<tr class="sess" onclick="showTimeline(${s.id})">
-      <td>${fmtT(s.started_at)}</td><td>${esc(s.mac)}</td><td>${esc(s.ip)}</td>
-      <td>${esc(s.firmware||"–")}</td><td>${esc(s.image||"–")}</td><td>${chip(s.result)}</td></tr>`).join("")
-      ||`<tr><td colspan="6" class="dim">No boot sessions yet.</td></tr>`;
-    $("alerts").innerHTML=al.slice().reverse().map(a=>`<tr>
-      <td>${fmtT(a.time)}</td><td>${chip(a.kind)}</td><td>${esc(a.message)}</td></tr>`).join("")
-      ||`<tr><td colspan="3" class="dim">No alerts. Quiet is good.</td></tr>`;
-  }catch(e){$("meta").textContent="connection lost — retrying";}
+    const [h,imgs,sess,al,act,cfg]=await Promise.all([
+      j("/api/health"),j("/api/images"),j("/api/sessions?limit=200"),
+      j("/api/alerts"),j("/api/activity?hours=24"),j("/api/config")]);
+    Object.assign(S,{health:h,images:imgs,sessions:sess,alerts:al,activity:act,config:cfg,connected:true});
+  }catch(e){S.connected=false}
+  paintChrome();render();
 }
-async function showTimeline(id){
-  const s=await j("/api/sessions/"+id);
-  $("tl-title").textContent=`${s.mac} — ${s.image||"no image"} — ${s.result||"in progress"}`;
-  $("tl-events").innerHTML=(s.events||[]).map(e=>`<div class="ev">
-    <div class="t">${new Date(e.at).toLocaleTimeString()}</div>
-    <div class="s">${esc(e.stage)}</div><div>${esc(e.detail)}</div></div>`).join("")
-    ||'<div class="dim">No events recorded.</div>';
-  $("timeline").style.display="block";
+function paintChrome(){
+  const h=S.health;
+  $("#live-dot").className="dot"+(S.connected?"":" down");
+  $("#live-text").textContent=S.connected?"live":"connection lost — retrying";
+  if(h){$("#site").textContent=h.site;$("#uptime").textContent=fmtUp(h.uptime_seconds);
+        $("#foot").textContent=`emberbootd ${h.version}`}
+  const b=$("#cfg-banner");
+  if(S.config?.rejected){b.style.display="block";$("#cfg-error").textContent=S.config.rejected}
+  else b.style.display="none";
 }
-refresh();setInterval(refresh,5000);
+setInterval(()=>{if(!document.hidden)refresh()},5000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+
+/* ── router ─────────────────────────────────────────────────────────── */
+const TITLES={overview:"Overview",images:"Images",sessions:"Boot sessions",alerts:"Alerts",config:"Config"};
+function route(){
+  const v=(location.hash||"#overview").slice(1);
+  S.view=TITLES[v]?v:"overview";
+  document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("on",a.dataset.view===S.view));
+  $("#view-title").textContent=TITLES[S.view];
+  render();
+}
+window.addEventListener("hashchange",route);
+
+/* ── the boot fuse: the fixed pipeline every PXE boot follows ───────── */
+const STAGES=["dhcp","tftp","script","payload"];
+function fuse(sess){
+  const seen=new Set(sess.stages||[]);
+  let html='<span class="fuse" title="dhcp → tftp → menu → payload">';
+  STAGES.forEach((st,i)=>{
+    const lit=seen.has(st);
+    if(i>0)html+=`<s class="${lit?"lit":""}"></s>`;
+    html+=`<i class="${lit?"lit":""}"></i>`;
+  });
+  const cls=sess.result==="completed"?"end ok":sess.result?"end "+(sess.result==="stalled"?"warn":"bad"):"";
+  html+=`<s class="${sess.result?"lit":""}"></s><i class="${cls}"></i></span>`;
+  return html;
+}
+function resultChip(r){return r?`<span class="chip ${esc(r)}">${r==="completed"?"✓ ":r==="stalled"?"⚠ ":"✕ "}${esc(r)}</span>`
+                              :'<span class="chip active">● in progress</span>'}
+
+/* ── views ──────────────────────────────────────────────────────────── */
+const views={};
+function render(){(views[S.view]||views.overview)()}
+function overview(){
+  const h=S.health||{},ready=S.images.filter(i=>i.state==="ready").length;
+  const day=Date.now()-864e5,al24=S.alerts.filter(a=>+new Date(a.time)>day).length;
+  $("#view").innerHTML=`
+    <div class="cards">
+      <div class="card"><div class="v">${S.connected?"Serving":"Down"}</div><div class="k">Boot service</div></div>
+      <div class="card"><div class="v">${ready}<span class="faint"> / ${S.images.length}</span></div><div class="k">Images ready</div></div>
+      <div class="card"><div class="v">${h.active_sessions??"–"}</div><div class="k">Machines booting now</div></div>
+      <div class="card"><div class="v">${al24}</div><div class="k">Alerts, last 24 h</div></div>
+    </div>
+    <div class="eyebrow">Boot activity — last 24 hours</div>
+    <div class="panel">
+      <div class="chartwrap" id="chart"></div>
+      <div class="legend">
+        <span><b style="background:var(--ok)"></b>✓ Completed</span>
+        <span><b style="background:var(--warn)"></b>⚠ Stalled</span>
+        <span><b style="background:var(--bad)"></b>✕ Failed</span>
+      </div>
+    </div>
+    <div class="eyebrow">Latest boot sessions</div>
+    <div class="panel">${sessionTable(S.sessions.slice(0,8),true)}</div>`;
+  drawChart($("#chart"),S.activity);
+  bindSessionRows();
+}
+views.overview=overview;
+
+function images(){
+  const rows=S.images.map((i,n)=>`<tr class="row" data-img="${n}" tabindex="0">
+    <td><div>${esc(i.display_name)}${i.disabled?' <span class="faint">(hidden from menu)</span>':""}</div>
+        <div class="mono faint">${esc(i.file_name)}</div></td>
+    <td><span class="chip ${esc(i.state)}">${esc(i.state)}</span></td>
+    <td class="mono">${esc(i.strategy||"–")}</td>
+    <td class="mono">${esc(i.plan?.family||"–")}</td>
+    <td class="mono">${fmtSize(i.size_bytes)}</td></tr>`).join("");
+  $("#view").innerHTML=`<div class="panel"><table>
+    <thead><tr><th>Image</th><th>State</th><th>Strategy</th><th>Family</th><th>Size</th></tr></thead>
+    <tbody>${rows||""}</tbody></table>
+    ${rows?"":`<div class="empty"><b>No ISOs yet.</b><br>Drop one into the images folder on the server — it appears here as soon as it's validated.</div>`}</div>`;
+  document.querySelectorAll("[data-img]").forEach(el=>{
+    const open=()=>imageDrawer(S.images[+el.dataset.img]);
+    el.addEventListener("click",open);
+    el.addEventListener("keydown",e=>{if(e.key==="Enter")open()});
+  });
+}
+views.images=images;
+
+function sessions(){
+  const q=S.q.toLowerCase();
+  let list=S.sessions.filter(s=>!q||s.mac.includes(q)||s.ip.includes(q)||(s.image||"").toLowerCase().includes(q));
+  if(S.filter==="active")list=list.filter(s=>!s.result);
+  if(S.filter==="completed")list=list.filter(s=>s.result==="completed");
+  if(S.filter==="failed")list=list.filter(s=>s.result==="failed"||s.result==="stalled");
+  $("#view").innerHTML=`
+    <div class="toolbar">
+      <input class="search" id="q" placeholder="Search MAC, IP, or image" value="${esc(S.q)}" aria-label="Search sessions">
+      <div class="seg" role="group" aria-label="Filter by result">
+        ${["all","active","completed","failed"].map(f=>`<button data-f="${f}" class="${S.filter===f?"on":""}">${f[0].toUpperCase()+f.slice(1)}</button>`).join("")}
+      </div>
+      <span class="dim" style="font-size:.78rem">${list.length} of ${S.sessions.length}</span>
+    </div>
+    <div class="panel">${sessionTable(list,false)}</div>`;
+  const qi=$("#q");
+  qi.addEventListener("input",()=>{S.q=qi.value;const p=qi.selectionStart;sessions();const nq=$("#q");nq.focus();nq.setSelectionRange(p,p)});
+  document.querySelectorAll("[data-f]").forEach(b=>b.addEventListener("click",()=>{S.filter=b.dataset.f;sessions()}));
+  bindSessionRows();
+}
+views.sessions=sessions;
+
+function sessionTable(list,compact){
+  if(!list.length)return `<div class="empty"><b>No boot sessions${S.q||S.filter!=="all"?" match":""} yet.</b><br>${S.q||S.filter!=="all"?"Adjust the search or filter above.":"PXE-boot any machine on this network and its journey shows up here live."}</div>`;
+  return `<table><thead><tr><th>Started</th><th>MAC</th><th>IP</th><th>Pipeline</th><th>Image</th><th>Result</th></tr></thead><tbody>
+  ${list.map(s=>`<tr class="row" data-sid="${s.id}" tabindex="0">
+    <td class="mono dim">${fmtT(s.started_at)}</td>
+    <td class="mono">${esc(s.mac)}</td>
+    <td class="mono dim">${esc(s.ip||"–")}</td>
+    <td>${fuse(s)}</td>
+    <td class="mono dim">${esc(s.image||"–")}</td>
+    <td>${resultChip(s.result)}</td></tr>`).join("")}</tbody></table>`;
+}
+function bindSessionRows(){
+  document.querySelectorAll("[data-sid]").forEach(el=>{
+    const open=()=>sessionDrawer(+el.dataset.sid);
+    el.addEventListener("click",open);
+    el.addEventListener("keydown",e=>{if(e.key==="Enter")open()});
+  });
+}
+
+function alerts(){
+  const rows=S.alerts.slice().reverse().map(a=>`<tr>
+    <td class="mono dim">${fmtT(a.time)}</td>
+    <td><span class="chip ${a.kind==="rogue_pxe_server"||a.kind==="crash_restart"?"failed":"stalled"}">${esc(a.kind.replace(/_/g," "))}</span></td>
+    <td>${esc(a.message)}${a.details?`<div class="mono faint" style="font-size:.72rem">${esc(Object.entries(a.details).map(([k,v])=>k+"="+v).join("  "))}</div>`:""}</td></tr>`).join("");
+  $("#view").innerHTML=`<div class="panel"><table>
+    <thead><tr><th>Time</th><th>Kind</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
+    ${rows?"":`<div class="empty"><b>Nothing to report.</b><br>Alerts appear here for crash restarts, invalid images, boot-failure spikes, low disk space, rejected config edits, and rogue PXE servers.</div>`}</div>`;
+}
+views.alerts=alerts;
+
+function config(){
+  const h=S.health||{},c=S.config||{};
+  const bios="undionly.kpxe",uefi="snponly.efi";
+  $("#view").innerHTML=`
+    <div class="eyebrow">Configuration file</div>
+    <div class="panel" style="padding:1rem 1.2rem">
+      <dl class="kv">
+        <dt>File</dt><dd class="mono">${esc(c.path||"–")}</dd>
+        <dt>Loaded</dt><dd>${c.loaded_at?fmtT(c.loaded_at):"–"}</dd>
+        <dt>Status</dt><dd>${c.rejected?'<span class="chip failed">✕ rejected — serving last good</span>':'<span class="chip ready">✓ valid and serving</span>'}</dd>
+        <dt>Sign-in</dt><dd>${h.auth_configured?'<span class="chip ready">✓ password / token set</span>':'<span class="chip stalled">⚠ open access — set a password or restrict dashboard_bind</span>'}</dd>
+      </dl>
+      <button class="btn primary" id="reload">Reload config file</button>
+      <span class="dim" style="font-size:.78rem;margin-left:.8rem">Edits are picked up automatically; use this to re-check right now.</span>
+    </div>
+    <div class="eyebrow">Connecting clients — what your network needs to know</div>
+    <div class="panel" style="padding:1rem 1.2rem">
+      <dl class="kv">
+        <dt>This server</dt><dd class="mono">${esc(h.advertise_ip||"–")}</dd>
+        <dt>DHCP mode</dt><dd class="mono">${esc(h.dhcp_mode||"–")}</dd>
+        <dt>Boot URL</dt><dd class="mono">${esc(h.http_base||"")}/boot.ipxe</dd>
+      </dl>
+      <p class="dim" style="font-size:.82rem;margin-bottom:.6rem">
+        In <b>proxy</b> mode there is nothing to configure — clients on this network find Emberboot automatically.
+        On relayed VLANs, or in <b>options66-67</b> mode, set these on your DHCP server:</p>
+      <pre class="code">Option 66 (TFTP server) : ${esc(h.advertise_ip||"&lt;server-ip&gt;")}
+Option 67 (boot file)   : ${bios}   ← BIOS clients
+                          ${uefi}   ← UEFI x64 clients</pre>
+      <div class="copyrow"><button class="btn" id="copy-dhcp">Copy DHCP values</button></div>
+    </div>
+    <div class="eyebrow">API</div>
+    <div class="panel" style="padding:1rem 1.2rem">
+      <p class="dim" style="font-size:.82rem;margin-bottom:.6rem">Everything on this page is available as JSON with a bearer token (<span class="mono">auth.api_tokens</span>):</p>
+      <pre class="code">GET /api/health      GET /api/images      GET /api/sessions?mac=…
+GET /api/activity    GET /api/alerts      GET /api/config
+POST /api/reload     GET /metrics         (Prometheus)</pre>
+    </div>`;
+  $("#reload").addEventListener("click",async()=>{
+    try{const r=await j("/api/reload",{method:"POST"});
+      r.ok?toast("Config reloaded"):toast("Config rejected — still serving last good. "+r.error,true);
+      refresh();
+    }catch(e){toast("Reload request failed: "+e.message,true)}
+  });
+  $("#copy-dhcp").addEventListener("click",()=>copy(`option 66 = ${h.advertise_ip}\noption 67 = ${bios} (BIOS) / ${uefi} (UEFI x64)`,"DHCP values"));
+}
+views.config=config;
+
+/* ── drawers ────────────────────────────────────────────────────────── */
+let lastFocus=null;
+function openDrawer(title,html){
+  lastFocus=document.activeElement;
+  $("#drawer-title").textContent=title;
+  $("#drawer-body").innerHTML=html;
+  $("#drawer").classList.add("open");$("#scrim").classList.add("open");
+  $("#drawer-x").focus();
+}
+function closeDrawer(){
+  $("#drawer").classList.remove("open");$("#scrim").classList.remove("open");
+  lastFocus?.focus?.();
+}
+$("#drawer-x").addEventListener("click",closeDrawer);
+$("#scrim").addEventListener("click",closeDrawer);
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});
+
+function imageDrawer(i){
+  const p=i.plan||{};
+  const snippet=`images:\n  attach:\n    ${i.file_name}:\n      display_name: "${i.display_name}"\n      answer_file: ""        # file in answers/\n      disabled: ${i.disabled}\n      kernel_args: ""`;
+  openDrawer(i.display_name,`
+    <dl class="kv">
+      <dt>File</dt><dd class="mono">${esc(i.file_name)}</dd>
+      <dt>State</dt><dd><span class="chip ${esc(i.state)}">${esc(i.state)}</span></dd>
+      <dt>Strategy</dt><dd class="mono">${esc(i.strategy||"–")}</dd>
+      <dt>Family</dt><dd class="mono">${esc(p.family||"–")}</dd>
+      <dt>Size</dt><dd class="mono">${fmtSize(i.size_bytes)}</dd>
+      <dt>Answer file</dt><dd class="mono">${esc(i.answer_file||"none")}</dd>
+    </dl>
+    <div class="eyebrow" style="margin-top:0">Why this strategy</div>
+    <p class="dim" style="font-size:.82rem">${esc(i.reason)}</p>
+    ${p.kernel?`<div class="eyebrow">Boot plan</div>
+    <pre class="code">kernel  ${esc(p.kernel)}\n${(p.initrds||[]).map(x=>"initrd  "+esc(x)).join("\n")}\nargs    ${esc(p.args||"")}</pre>`:""}
+    ${p.files?`<div class="eyebrow">Boot plan (wimboot)</div>
+    <pre class="code">${esc(Object.entries(p.files).map(([k,v])=>k.padEnd(10)+v).join("\n"))}</pre>`:""}
+    <div class="eyebrow">Config snippet</div>
+    <p class="dim" style="font-size:.78rem">Paste into emberboot.yaml to customize this image:</p>
+    <pre class="code">${esc(snippet)}</pre>
+    <div class="copyrow"><button class="btn" id="copy-snip">Copy snippet</button></div>`);
+  $("#copy-snip").addEventListener("click",()=>copy(snippet,"Config snippet"));
+}
+
+async function sessionDrawer(id){
+  let s;try{s=await j("/api/sessions/"+id)}catch(e){toast("Could not load session "+id,true);return}
+  const evs=s.events||[];
+  const t0=evs.length?+new Date(evs[0].at):0;
+  openDrawer(`${s.mac}`,`
+    <dl class="kv">
+      <dt>Result</dt><dd>${resultChip(s.result)}</dd>
+      <dt>Started</dt><dd>${fmtT(s.started_at)}</dd>
+      <dt>IP</dt><dd class="mono">${esc(s.ip||"–")}</dd>
+      <dt>Firmware</dt><dd class="mono">${esc(s.firmware||"–")}</dd>
+      <dt>Image</dt><dd class="mono">${esc(s.image||"–")}</dd>
+      <dt>Strategy</dt><dd class="mono">${esc(s.strategy||"–")}</dd>
+    </dl>
+    <div class="eyebrow" style="margin-top:0">Timeline</div>
+    <div class="tl">${evs.map(e=>{
+      const dt=((+new Date(e.at)-t0)/1000);
+      const term=e.stage==="complete"?"term-ok":e.stage==="fail"?"term-bad":"";
+      return `<div class="e ${term}"><span class="stage">${esc(e.stage)}</span>${esc(e.detail)}
+        <div class="meta">${fmtClock(e.at)} · +${dt<60?dt.toFixed(1)+"s":Math.floor(dt/60)+"m "+Math.round(dt%60)+"s"}</div></div>`;
+    }).join("")||'<div class="dim">No events recorded for this session.</div>'}</div>`);
+}
+
+/* ── activity chart: hourly stacked bars by result (status colors) ──── */
+function drawChart(host,buckets){
+  if(!host)return;
+  const total=buckets.reduce((a,b)=>a+b.completed+b.failed+b.stalled,0);
+  if(!total){host.innerHTML=`<div class="empty" style="padding:1.6rem"><b>No boots in the last 24 hours.</b><br>Hourly results land here as machines start booting.</div>`;return}
+  const W=host.clientWidth-20||600,H=150,padL=30,padB=18;
+  const n=buckets.length,slot=(W-padL)/n,bw=Math.max(4,Math.min(18,Math.floor(slot)-2));
+  const max=Math.max(...buckets.map(b=>b.completed+b.failed+b.stalled));
+  const yMax=Math.max(2,Math.ceil(max/2)*2);
+  const y=v=>H-padB-(v/yMax)*(H-padB-8);
+  // SVG presentation attributes cannot resolve CSS var(); colors go through
+  // style attributes instead.
+  const C={completed:"#0ca30c",stalled:"#fab219",failed:"#d03b3b"};
+  let svg=`<svg width="${W}" height="${H}" role="img" aria-label="Boots per hour by result, last 24 hours">`;
+  [0,yMax/2,yMax].forEach(v=>{svg+=`<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--hairline)" stroke-width="1"/>
+    <text x="${padL-6}" y="${y(v)+3}" text-anchor="end" font-size="9" style="fill:var(--ink-3);font-family:var(--mono);font-variant-numeric:tabular-nums">${v}</text>`});
+  buckets.forEach((b,i)=>{
+    const x=padL+i*slot+(slot-bw)/2;let cur=0;
+    const parts=[["completed",b.completed],["stalled",b.stalled],["failed",b.failed]].filter(p=>p[1]>0);
+    parts.forEach(([k,v],pi)=>{
+      const y1=y(cur+v),h=Math.max(1,y(cur)-y(cur+v)-(pi<parts.length-1?2:0));
+      const top=pi===parts.length-1;
+      svg+=`<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="${C[k]}" ${top?'rx="2"':""}/>`;
+      cur+=v;
+    });
+    const hr=new Date(b.hour).getHours();
+    if(hr%4===0)svg+=`<text x="${x+bw/2}" y="${H-4}" text-anchor="middle" font-size="9" style="fill:var(--ink-3);font-family:var(--mono)">${String(hr).padStart(2,"0")}:00</text>`;
+    svg+=`<rect x="${padL+i*slot}" y="0" width="${slot}" height="${H-padB}" fill="transparent" data-b="${i}"/>`;
+  });
+  svg+="</svg>";
+  host.innerHTML=svg+`<div class="tip" id="tip"></div>`;
+  const tip=$("#tip");
+  host.querySelectorAll("[data-b]").forEach(r=>{
+    r.addEventListener("mouseenter",()=>{
+      const b=buckets[+r.dataset.b],hr=new Date(b.hour);
+      tip.innerHTML=`<div class="h">${String(hr.getHours()).padStart(2,"0")}:00–${String((hr.getHours()+1)%24).padStart(2,"0")}:00</div>
+        <div class="r"><span><b style="color:var(--ok)">✓</b> Completed</span><b>${b.completed}</b></div>
+        <div class="r"><span><b style="color:var(--warn)">⚠</b> Stalled</span><b>${b.stalled}</b></div>
+        <div class="r"><span><b style="color:var(--bad)">✕</b> Failed</span><b>${b.failed}</b></div>`;
+      tip.style.display="block";
+      const x=Math.min(+r.getAttribute("x")+10,host.clientWidth-160);
+      tip.style.left=x+"px";tip.style.top="6px";
+    });
+    r.addEventListener("mouseleave",()=>tip.style.display="none");
+  });
+}
+let resizeT;window.addEventListener("resize",()=>{clearTimeout(resizeT);resizeT=setTimeout(()=>{if(S.view==="overview")render()},150)});
+
+/* ── go ─────────────────────────────────────────────────────────────── */
+route();refresh();
 </script>
 </body>
 </html>

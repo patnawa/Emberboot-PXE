@@ -4,6 +4,15 @@ A PXE boot server built for unattended 24x7 operation on large multi-VLAN
 networks. Drop an ISO into a folder and it boots — with the reliability and
 observability that iVentoy-class tools lack.
 
+![Emberboot management console — overview](docs/screenshots/overview.png)
+
+The embedded management console (no external assets, works on an offline
+network): live Boot Session pipelines, hourly boot activity, image states
+with their chosen Boot Strategy and the reason for it, alert history, and a
+config view that shows the exact DHCP option 66/67 values for your network.
+
+![Emberboot management console — images](docs/screenshots/images.png)
+
 - **One static binary** (Go, CGO-free), Linux and Windows, container-friendly.
 - **proxyDHCP** by default: coexists with your existing DHCP server, zero
   changes to it. Options-66/67 mode for relayed multi-VLAN networks.

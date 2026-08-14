@@ -32,6 +32,10 @@ type APIDeps struct {
 	Metrics   *metrics.M
 	Version   string
 	StartTime time.Time
+	// AdvertiseIP and HTTPBase describe this instance's network identity, so
+	// the Config view can show admins the exact DHCP 66/67 values to use.
+	AdvertiseIP string
+	HTTPBase    string
 }
 
 // APIServer is the authenticated management server (read-mostly dashboard +
@@ -52,6 +56,7 @@ func NewAPI(d APIDeps, addr string) *APIServer {
 	mux.HandleFunc("GET /api/images", s.auth(s.handleImages))
 	mux.HandleFunc("GET /api/sessions", s.auth(s.handleSessions))
 	mux.HandleFunc("GET /api/sessions/{id}", s.auth(s.handleSession))
+	mux.HandleFunc("GET /api/activity", s.auth(s.handleActivity))
 	mux.HandleFunc("GET /api/alerts", s.auth(s.handleAlerts))
 	mux.HandleFunc("GET /api/config", s.auth(s.handleConfig))
 	mux.HandleFunc("POST /api/reload", s.auth(s.handleReload))
@@ -146,6 +151,12 @@ func (s *APIServer) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"version":         s.d.Version,
 		"uptime_seconds":  int(time.Since(s.d.StartTime).Seconds()),
 		"active_sessions": s.d.Sessions.ActiveCount(),
+		"advertise_ip":    s.d.AdvertiseIP,
+		"http_base":       s.d.HTTPBase,
+		"dhcp_mode":       string(cfg.Network.DHCPMode),
+		"tftp_port":       cfg.Network.TFTPPort,
+		"http_port":       cfg.Network.HTTPPort,
+		"auth_configured": cfg.Auth.AdminPasswordHash != "" || len(cfg.Auth.APITokens) > 0,
 	})
 }
 
@@ -189,6 +200,19 @@ func (s *APIServer) handleSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, sess)
+}
+
+func (s *APIServer) handleActivity(w http.ResponseWriter, r *http.Request) {
+	hours := 24
+	if v, err := strconv.Atoi(r.URL.Query().Get("hours")); err == nil && v >= 1 && v <= 168 {
+		hours = v
+	}
+	buckets, err := s.d.Sessions.Activity(hours)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, buckets)
 }
 
 func (s *APIServer) handleAlerts(w http.ResponseWriter, r *http.Request) {

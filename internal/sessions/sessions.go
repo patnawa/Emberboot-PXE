@@ -53,7 +53,10 @@ type Session struct {
 	StartedAt time.Time `json:"started_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Result    string    `json:"result"` // "" while in progress
-	Events    []Event   `json:"events,omitempty"`
+	// Stages lists the distinct stages seen (list queries only) so the
+	// dashboard can draw the boot pipeline without loading full timelines.
+	Stages []string `json:"stages,omitempty"`
+	Events []Event  `json:"events,omitempty"`
 }
 
 // SpikeConfig mirrors config.FailureSpike, provided per-check so hot reloads
@@ -324,9 +327,67 @@ func (s *Store) checkSpike(cfg SpikeConfig) (failed, total int, spiking bool) {
 	return failed, total, failed*100 >= total*cfg.ThresholdPc
 }
 
-// Recent returns the newest sessions (without events).
+// ActivityBucket is one hour of finished Boot Sessions, for the dashboard
+// activity chart.
+type ActivityBucket struct {
+	Hour      time.Time `json:"hour"`
+	Completed int       `json:"completed"`
+	Failed    int       `json:"failed"`
+	Stalled   int       `json:"stalled"`
+}
+
+// Activity returns per-hour result counts for the last N hours, oldest
+// first. Hours with no sessions are included as zero buckets so the chart's
+// time axis is continuous.
+func (s *Store) Activity(hours int) ([]ActivityBucket, error) {
+	const hourMs = int64(time.Hour / time.Millisecond)
+	now := time.Now()
+	start := now.Truncate(time.Hour).Add(-time.Duration(hours-1) * time.Hour)
+
+	rows, err := s.db.Query(`SELECT (started_at/?)*? AS h, result, COUNT(*)
+	  FROM sessions WHERE started_at >= ? AND result != '' GROUP BY h, result`,
+		hourMs, hourMs, start.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	byHour := map[int64]*ActivityBucket{}
+	out := make([]ActivityBucket, hours)
+	for i := range out {
+		t := start.Add(time.Duration(i) * time.Hour)
+		out[i].Hour = t
+		byHour[t.UnixMilli()] = &out[i]
+	}
+	for rows.Next() {
+		var h int64
+		var result string
+		var n int
+		if err := rows.Scan(&h, &result, &n); err != nil {
+			return nil, err
+		}
+		b, ok := byHour[h]
+		if !ok {
+			continue
+		}
+		switch result {
+		case ResultCompleted:
+			b.Completed += n
+		case ResultFailed:
+			b.Failed += n
+		case ResultStalled:
+			b.Stalled += n
+		}
+	}
+	return out, rows.Err()
+}
+
+const listColumns = `id, mac, ip, firmware, image, strategy, started_at, updated_at, result,
+  COALESCE((SELECT GROUP_CONCAT(DISTINCT stage) FROM events e WHERE e.session_id=sessions.id), '')`
+
+// Recent returns the newest sessions (without events, with stage summary).
 func (s *Store) Recent(limit int) ([]Session, error) {
-	rows, err := s.db.Query(`SELECT id, mac, ip, firmware, image, strategy, started_at, updated_at, result
+	rows, err := s.db.Query(`SELECT `+listColumns+`
 	  FROM sessions ORDER BY started_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -337,7 +398,7 @@ func (s *Store) Recent(limit int) ([]Session, error) {
 
 // ForMAC returns a MAC's sessions, newest first.
 func (s *Store) ForMAC(mac string, limit int) ([]Session, error) {
-	rows, err := s.db.Query(`SELECT id, mac, ip, firmware, image, strategy, started_at, updated_at, result
+	rows, err := s.db.Query(`SELECT `+listColumns+`
 	  FROM sessions WHERE mac=? ORDER BY started_at DESC LIMIT ?`, strings.ToLower(mac), limit)
 	if err != nil {
 		return nil, err
@@ -388,11 +449,19 @@ func scanSession(r rowScanner) (*Session, error) {
 func scanSessions(rows *sql.Rows) ([]Session, error) {
 	var out []Session
 	for rows.Next() {
-		sess, err := scanSession(rows)
-		if err != nil {
+		var sess Session
+		var started, updated int64
+		var stageCSV string
+		if err := rows.Scan(&sess.ID, &sess.MAC, &sess.IP, &sess.Firmware, &sess.Image,
+			&sess.Strategy, &started, &updated, &sess.Result, &stageCSV); err != nil {
 			return nil, err
 		}
-		out = append(out, *sess)
+		sess.StartedAt = time.UnixMilli(started)
+		sess.UpdatedAt = time.UnixMilli(updated)
+		if stageCSV != "" {
+			sess.Stages = strings.Split(stageCSV, ",")
+		}
+		out = append(out, sess)
 	}
 	return out, rows.Err()
 }
