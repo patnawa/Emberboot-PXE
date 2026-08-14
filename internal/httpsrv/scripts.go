@@ -70,8 +70,10 @@ func menuScript(cfg *config.Config, imgs []images.Image, mac net.HardwareAddr, i
 // imageScript builds the per-Image boot script for one Client, by strategy.
 // base is the absolute URL prefix the client reached us on (from the request
 // Host) — kernel arguments like url=/fetch=/inst.repo= are resolved by the
-// booted OS, not by iPXE, so they must be absolute.
-func imageScript(cfg *config.Config, img images.Image, mac net.HardwareAddr, ip net.IP, base string) string {
+// booted OS, not by iPXE, so they must be absolute. memMB is the client's
+// reported RAM (0 = unknown), used to refuse RAM-loading images with a clear
+// message instead of a mysterious mid-transfer death.
+func imageScript(cfg *config.Config, img images.Image, mac net.HardwareAddr, ip net.IP, base string, memMB int) string {
 	dec := rules.Evaluate(cfg, mac, ip)
 	answer := img.AnswerFile
 	if dec.AnswerFile != "" {
@@ -81,6 +83,18 @@ func imageScript(cfg *config.Config, img images.Image, mac net.HardwareAddr, ip 
 	enc := url.PathEscape(img.FileName)
 	isoURL := base + "/iso/" + enc
 	content := base + "/img/" + enc + "/file" // in-ISO tree
+
+	// RAM gate: iPXE cannot compare numbers, so the check runs server-side
+	// on the memsize the menu forwarded.
+	if img.Plan.RAMLoadMB > 0 && memMB > 0 && memMB < img.Plan.RAMLoadMB {
+		return fmt.Sprintf(`#!ipxe
+echo
+echo %s loads about %d MB into RAM, but this machine reports only %d MB.
+echo Booting it here would fail partway through the transfer.
+prompt Press any key to return to the menu
+chain %s/boot.ipxe
+`, img.DisplayName, img.Plan.RAMLoadMB, memMB, base)
+	}
 
 	var b strings.Builder
 	b.WriteString("#!ipxe\n")
@@ -121,7 +135,8 @@ func imageScript(cfg *config.Config, img images.Image, mac net.HardwareAddr, ip 
 			fmt.Fprintf(&b, "initrd -n boot.sdi %s/%s boot.sdi\n", content, p)
 		}
 		if p, ok := img.Plan.Files["install"]; ok {
-			fmt.Fprintf(&b, "initrd -n install.wim %s/%s install.wim\n", content, p)
+			name := installName(p)
+			fmt.Fprintf(&b, "initrd -n %s %s/%s %s\n", name, content, p, name)
 		}
 		if p, ok := img.Plan.Files["boot.wim"]; ok {
 			fmt.Fprintf(&b, "initrd -n boot.wim %s/%s boot.wim\n", content, p)
@@ -129,6 +144,11 @@ func imageScript(cfg *config.Config, img images.Image, mac net.HardwareAddr, ip 
 		b.WriteString("boot || goto failed\n")
 
 	case images.StrategyMemdisk:
+		// A standalone EFI application (memtest-style ISOs) chains directly
+		// on UEFI — no RAM limit and none of sanboot's UEFI flakiness.
+		if efi, ok := img.Plan.Files["efi"]; ok {
+			fmt.Fprintf(&b, "iseq ${platform} efi && chain %s/%s ||\n", content, efi)
+		}
 		b.WriteString("echo Loading whole ISO into RAM (needs RAM larger than the ISO)...\n")
 		fmt.Fprintf(&b, "sanboot %s || goto failed\n", isoURL)
 
@@ -164,19 +184,28 @@ func answerArgs(family, answer string, mac net.HardwareAddr, base string) string
 // X:\Windows\System32, where it overrides the default shell startup).
 const winpeshlINI = "[LaunchApps]\r\n\"install.bat\"\r\n"
 
+// installName preserves the source extension: setup.exe treats .wim and
+// .esd differently, so an .esd must stay an .esd.
+func installName(sourcePath string) string {
+	if strings.HasSuffix(strings.ToLower(sourcePath), ".esd") {
+		return "install.esd"
+	}
+	return "install.wim"
+}
+
 // installBAT runs inside WinPE: initialize, then hand over to Windows Setup
-// with the injected install.wim (and answer file when present).
-func installBAT(hasInstall, hasAnswer bool) string {
+// with the injected install source (and answer file when present).
+func installBAT(installFile string, hasAnswer bool) string {
 	var b strings.Builder
 	b.WriteString("@echo off\r\n")
 	b.WriteString("wpeinit\r\n")
 	switch {
-	case hasInstall && hasAnswer:
-		b.WriteString("X:\\sources\\setup.exe /installfrom:X:\\Windows\\System32\\install.wim /unattend:X:\\Windows\\System32\\autounattend.xml\r\n")
-	case hasInstall:
-		b.WriteString("X:\\sources\\setup.exe /installfrom:X:\\Windows\\System32\\install.wim\r\n")
+	case installFile != "" && hasAnswer:
+		fmt.Fprintf(&b, "X:\\sources\\setup.exe /installfrom:X:\\Windows\\System32\\%s /unattend:X:\\Windows\\System32\\autounattend.xml\r\n", installFile)
+	case installFile != "":
+		fmt.Fprintf(&b, "X:\\sources\\setup.exe /installfrom:X:\\Windows\\System32\\%s\r\n", installFile)
 	default:
-		b.WriteString("echo No install.wim was injected; starting plain WinPE setup.\r\n")
+		b.WriteString("echo No install image was injected; starting plain WinPE setup.\r\n")
 		b.WriteString("X:\\sources\\setup.exe\r\n")
 	}
 	// If setup exits, drop to a shell rather than a black screen.

@@ -227,7 +227,8 @@ func (s *BootServer) handleImageScript(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.d.Sessions.TouchByIP(connIP, "script", "selected "+img.DisplayName)
 	}
-	writeScript(w, imageScript(s.d.Cfg(), img, mac, ip, base(r)))
+	memMB, _ := strconv.Atoi(r.URL.Query().Get("mem"))
+	writeScript(w, imageScript(s.d.Cfg(), img, mac, ip, base(r), memMB))
 	s.count("script", http.StatusOK)
 }
 
@@ -332,9 +333,12 @@ func (s *BootServer) handleWinpeshl(w http.ResponseWriter, r *http.Request) {
 func (s *BootServer) handleInstallBat(w http.ResponseWriter, r *http.Request) {
 	name, _ := url.PathUnescape(r.PathValue("name"))
 	img, ok := s.d.Images.Get(name)
-	hasInstall := ok && img.Plan.Files["install"] != ""
+	installFile := ""
+	if ok && img.Plan.Files["install"] != "" {
+		installFile = installName(img.Plan.Files["install"])
+	}
 	hasAnswer := r.URL.Query().Get("answer") == "true"
-	writeScript(w, installBAT(hasInstall, hasAnswer))
+	writeScript(w, installBAT(installFile, hasAnswer))
 	s.count("script", http.StatusOK)
 }
 

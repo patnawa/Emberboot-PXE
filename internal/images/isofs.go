@@ -78,6 +78,15 @@ func (h *isoHandle) exists(pathInISO string) bool {
 	return err == nil && !f.IsDir()
 }
 
+// sizeOf returns a file's size in bytes, 0 if it does not resolve.
+func (h *isoHandle) sizeOf(pathInISO string) int64 {
+	f, err := h.resolve(pathInISO)
+	if err != nil || f.IsDir() {
+		return 0
+	}
+	return f.Size()
+}
+
 // firstExisting returns the first candidate path that resolves to a file.
 func (h *isoHandle) firstExisting(candidates ...string) (string, bool) {
 	for _, p := range candidates {

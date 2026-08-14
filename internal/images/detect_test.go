@@ -129,6 +129,76 @@ func TestDetectSuse(t *testing.T) {
 	}
 }
 
+func TestDetectDracutLive(t *testing.T) {
+	h := makeISO(t, "LiveOS/squashfs.img", "images/pxeboot/vmlinuz", "images/pxeboot/initrd.img")
+	strategy, plan, _, err := detect(h, 2<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy != StrategyLinuxExtract || plan.Family != "dracut-live" {
+		t.Fatalf("live ISO must win over the anaconda rule, got %s/%s", strategy, plan.Family)
+	}
+	if !strings.Contains(plan.Args, "root=live:${ISOURL}") {
+		t.Errorf("dracut-live args: %s", plan.Args)
+	}
+	if plan.RAMLoadMB < 2048 {
+		t.Errorf("whole-ISO RAM load must be accounted for, got %d MB", plan.RAMLoadMB)
+	}
+}
+
+func TestDetectAlpine(t *testing.T) {
+	h := makeISO(t, "boot/vmlinuz-lts", "boot/initramfs-lts", "boot/modloop-lts")
+	strategy, plan, _, err := detect(h, 200<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy != StrategyLinuxExtract || plan.Family != "alpine" {
+		t.Fatalf("got %s/%s", strategy, plan.Family)
+	}
+	if !strings.Contains(plan.Args, "modloop=${CONTENT}/boot/modloop-lts") {
+		t.Errorf("alpine args: %s", plan.Args)
+	}
+}
+
+func TestDetectProxmoxExplained(t *testing.T) {
+	h := makeISO(t, "boot/linux26", "boot/initrd.img")
+	strategy, plan, reason, err := detect(h, 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy != StrategyMemdisk || plan.Family != "proxmox" {
+		t.Fatalf("got %s/%s", strategy, plan.Family)
+	}
+	if !strings.Contains(reason, "does not support direct netboot") {
+		t.Errorf("proxmox must be explained honestly: %s", reason)
+	}
+}
+
+func TestDetectStandaloneEFITool(t *testing.T) {
+	h := makeISO(t, "EFI/BOOT/BOOTX64.EFI")
+	strategy, plan, _, err := detect(h, 20<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strategy != StrategyMemdisk || plan.Files["efi"] == "" {
+		t.Fatalf("small EFI-app ISO should expose a chainable EFI: %s files=%v", strategy, plan.Files)
+	}
+}
+
+func TestDetectWindowsRAMAccounting(t *testing.T) {
+	h := makeISO(t, "sources/boot.wim", "sources/install.esd")
+	_, plan, _, err := detect(h, 5<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Files["install"] != "sources/install.esd" {
+		t.Errorf("install source: %v", plan.Files)
+	}
+	if plan.RAMLoadMB < 1536 {
+		t.Errorf("windows RAM load must include margin, got %d", plan.RAMLoadMB)
+	}
+}
+
 func TestDetectFallbackMemdisk(t *testing.T) {
 	h := makeISO(t, "some/random/file.txt")
 	strategy, plan, reason, err := detect(h, 100<<20)

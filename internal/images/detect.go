@@ -25,9 +25,18 @@ type BootPlan struct {
 	Kernel  string            `json:"kernel,omitempty"`
 	Initrds []string          `json:"initrds,omitempty"`
 	Args    string            `json:"args,omitempty"`
-	// Files maps wimboot initrd labels to in-ISO paths (Windows only).
+	// Files maps auxiliary labels to in-ISO paths: wimboot pieces for
+	// Windows, "efi" for a chainable standalone EFI application.
 	Files map[string]string `json:"files,omitempty"`
+	// RAMLoadMB estimates client RAM (MB) this image loads into memory
+	// (ISO/squashfs/install.wim plus working margin). 0 = no RAM loading.
+	// The boot script generator refuses clients below this with a clear
+	// message instead of a mysterious mid-boot failure.
+	RAMLoadMB int `json:"ram_load_mb,omitempty"`
 }
+
+// mb converts bytes to MB, rounding up.
+func mb(bytes int64) int { return int((bytes + 1<<20 - 1) >> 20) }
 
 // detect inspects an open ISO and picks the Boot Strategy per family
 // (ADR-0003). It returns a human-readable reason with the outcome — shown in
@@ -51,6 +60,8 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 		}
 		if p, ok := h.firstExisting("sources/install.wim", "sources/install.esd"); ok {
 			plan.Files["install"] = p
+			// boot.wim + install sources are injected into client RAM.
+			plan.RAMLoadMB = mb(h.sizeOf(p)+h.sizeOf(bootWim)) + 1536
 		}
 		return StrategyWimboot, plan, "Windows installer detected (sources/boot.wim); wimboot with HTTP sources", nil
 	}
@@ -69,6 +80,7 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 			Initrds: []string{initrd},
 			Args: fmt.Sprintf("root=/dev/ram0 ramdisk_size=%d ip=dhcp url=${ISOURL} cloud-config-url=/dev/null",
 				ramdiskKB),
+			RAMLoadMB: mb(sizeBytes) + 1536,
 		}, "Ubuntu casper live detected; kernel/initrd extracted, ISO fetched over HTTP (needs client RAM > ISO size)", nil
 	}
 
@@ -79,11 +91,31 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 			return "", BootPlan{}, "", fmt.Errorf("debian-live layout but initrd.img or filesystem.squashfs missing")
 		}
 		return StrategyLinuxExtract, BootPlan{
-			Family:  "debian-live",
-			Kernel:  kernel,
-			Initrds: []string{initrd},
-			Args:    "boot=live union=overlay components noswap noprompt ip=dhcp fetch=${CONTENT}/live/filesystem.squashfs",
+			Family:    "debian-live",
+			Kernel:    kernel,
+			Initrds:   []string{initrd},
+			Args:      "boot=live union=overlay components noswap noprompt ip=dhcp fetch=${CONTENT}/live/filesystem.squashfs",
+			RAMLoadMB: mb(h.sizeOf("live/filesystem.squashfs")) + 1024,
 		}, "Debian-live detected (Clonezilla/GParted family); squashfs fetched over HTTP into RAM", nil
+	}
+
+	// Fedora/RHEL-family *live* ISOs (Workstation, KDE spins, Rescue):
+	// dracut's livenet can fetch the whole ISO over HTTP via root=live:URL.
+	// Must be checked before the Anaconda installer rule — live ISOs also
+	// carry images/pxeboot/.
+	if h.exists("LiveOS/squashfs.img") {
+		kernel, ok := h.firstExisting("images/pxeboot/vmlinuz", "isolinux/vmlinuz")
+		initrd, ok2 := h.firstExisting("images/pxeboot/initrd.img", "isolinux/initrd.img")
+		if !ok || !ok2 {
+			return "", BootPlan{}, "", fmt.Errorf("LiveOS layout but no pxeboot kernel/initrd found")
+		}
+		return StrategyLinuxExtract, BootPlan{
+			Family:    "dracut-live",
+			Kernel:    kernel,
+			Initrds:   []string{initrd},
+			Args:      "root=live:${ISOURL} rd.live.image ip=dhcp",
+			RAMLoadMB: mb(sizeBytes) + 1024,
+		}, "Fedora/RHEL-family live image detected (LiveOS); dracut fetches the ISO over HTTP into RAM", nil
 	}
 
 	// archiso (Arch Linux) and SystemRescue (archiso-based, different basedir).
@@ -108,11 +140,31 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 			}
 			initrds = append(initrds, initrd)
 			return StrategyLinuxExtract, BootPlan{
-				Family:  "archiso",
-				Kernel:  kernel,
-				Initrds: initrds,
-				Args:    fmt.Sprintf("archisobasedir=%s archiso_http_srv=${CONTENT}/ ip=dhcp checksum", base),
+				Family:    "archiso",
+				Kernel:    kernel,
+				Initrds:   initrds,
+				Args:      fmt.Sprintf("archisobasedir=%s archiso_http_srv=${CONTENT}/ ip=dhcp checksum", base),
+				RAMLoadMB: mb(h.sizeOf(base+"/x86_64/airootfs.sfs")) + 1024,
 			}, "archiso detected (" + base + "); rootfs squashfs fetched over HTTP", nil
+		}
+	}
+
+	// Alpine Linux standard ISO: extracted kernel/initramfs plus the modloop
+	// served out of the ISO; packages come from the online mirror.
+	if kernel, ok := h.firstExisting("boot/vmlinuz-lts", "boot/vmlinuz-virt"); ok {
+		flavor := "lts"
+		if strings.HasSuffix(kernel, "virt") {
+			flavor = "virt"
+		}
+		initrd, ok2 := h.firstExisting("boot/initramfs-" + flavor)
+		if ok2 {
+			return StrategyLinuxExtract, BootPlan{
+				Family:  "alpine",
+				Kernel:  kernel,
+				Initrds: []string{initrd},
+				Args: fmt.Sprintf("modloop=${CONTENT}/boot/modloop-%s alpine_repo=https://dl-cdn.alpinelinux.org/alpine/latest-stable/main ip=dhcp",
+					flavor),
+			}, "Alpine Linux detected; modloop served from the ISO, packages from the online mirror (needs internet)", nil
 		}
 	}
 
@@ -147,16 +199,31 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 	// Debian installer ISOs are explicitly not netbootable from the ISO's own
 	// initrd (cdrom-flavored d-i). Detect and explain rather than misboot.
 	if h.exists("install.amd/vmlinuz") || h.exists("install.386/vmlinuz") {
-		return StrategyMemdisk, BootPlan{Family: "debian-installer"},
+		return StrategyMemdisk, BootPlan{Family: "debian-installer", RAMLoadMB: mb(sizeBytes) + 512},
 			"Debian installer ISO: its initrd only mounts local media, so falling back to Memdisk " +
 				"(needs client RAM > ISO size); consider Debian netboot images or a preseed mirror instead", nil
 	}
 
-	// Fallback: Memdisk (iPXE sanboot, whole ISO into RAM). Works for many
-	// utility ISOs; requires client RAM > ISO size and, on UEFI, an ISO with
-	// an EFI El Torito entry.
-	return StrategyMemdisk, BootPlan{Family: "unknown"},
-		"unrecognized layout; falling back to Memdisk (whole ISO into client RAM via iPXE sanboot)", nil
+	// Proxmox VE: not netbootable as-shipped (its init expects the ISO to be
+	// concatenated into the initrd). Say so instead of misbooting.
+	if h.exists("boot/linux26") {
+		return StrategyMemdisk, BootPlan{Family: "proxmox", RAMLoadMB: mb(sizeBytes) + 512},
+			"Proxmox VE ISO: Proxmox does not support direct netboot; trying Memdisk, which usually " +
+				"fails past the loader — install from USB or use the pve-iso-2-pxe method instead", nil
+	}
+
+	// Fallback: Memdisk (iPXE sanboot, whole ISO into RAM). A standalone EFI
+	// application in the ISO (memtest and similar tools) is chained directly
+	// on UEFI clients — no RAM limit, no sanboot flakiness.
+	plan := BootPlan{Family: "unknown", RAMLoadMB: mb(sizeBytes) + 512}
+	reason := "unrecognized layout; falling back to Memdisk (whole ISO into client RAM via iPXE sanboot)"
+	if sizeBytes < 128<<20 {
+		if efi, ok := h.firstExisting("EFI/BOOT/BOOTX64.EFI", "efi/boot/bootx64.efi"); ok {
+			plan.Files = map[string]string{"efi": efi}
+			reason += "; UEFI clients chain the ISO's standalone EFI application directly"
+		}
+	}
+	return StrategyMemdisk, plan, reason, nil
 }
 
 // friendlyName derives a menu label from an ISO file name:

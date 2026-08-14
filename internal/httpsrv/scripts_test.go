@@ -68,7 +68,7 @@ func TestLinuxExtractScript(t *testing.T) {
 		Args: "root=/dev/ram0 ip=dhcp url=${ISOURL}",
 	})
 	img.AnswerFile = "auto.yaml"
-	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase)
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
 	if !strings.Contains(s, "kernel "+testBase+"/img/ubuntu.iso/file/casper/vmlinuz") {
 		t.Errorf("kernel line wrong:\n%s", s)
 	}
@@ -90,7 +90,7 @@ func TestOverrideAnswerFileWins(t *testing.T) {
 		Family: "ubuntu-casper", Kernel: "casper/vmlinuz", Initrds: []string{"casper/initrd"},
 	})
 	img.AnswerFile = "default.yaml"
-	s := imageScript(cfg, img, testMAC(t), nil, testBase)
+	s := imageScript(cfg, img, testMAC(t), nil, testBase, 0)
 	if !strings.Contains(s, "seed/wipe.yaml/") || strings.Contains(s, "default.yaml") {
 		t.Errorf("Override answer file must win over the per-image one:\n%s", s)
 	}
@@ -104,7 +104,7 @@ func TestWimbootScript(t *testing.T) {
 			"boot.sdi": "boot/boot.sdi", "install": "sources/install.wim",
 		},
 	})
-	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase)
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
 	for _, want := range []string{
 		"kernel " + testBase + "/boot/wimboot",
 		"initrd -n winpeshl.ini",
@@ -126,20 +126,70 @@ func TestWimbootScript(t *testing.T) {
 
 func TestMemdiskScript(t *testing.T) {
 	img := readyImage("tool.iso", images.StrategyMemdisk, images.BootPlan{Family: "unknown"})
-	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase)
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
 	if !strings.Contains(s, "sanboot "+testBase+"/iso/tool.iso") {
 		t.Errorf("memdisk strategy must sanboot the raw ISO:\n%s", s)
 	}
 }
 
 func TestInstallBAT(t *testing.T) {
-	full := installBAT(true, true)
+	full := installBAT("install.wim", true)
 	if !strings.Contains(full, "/installfrom:X:\\Windows\\System32\\install.wim") ||
 		!strings.Contains(full, "/unattend:X:\\Windows\\System32\\autounattend.xml") {
 		t.Errorf("full install.bat wrong:\n%s", full)
 	}
 	if !strings.Contains(full, "wpeinit") {
 		t.Error("wpeinit must run before setup")
+	}
+	esd := installBAT("install.esd", false)
+	if !strings.Contains(esd, "/installfrom:X:\\Windows\\System32\\install.esd") {
+		t.Errorf(".esd sources must keep their extension:\n%s", esd)
+	}
+}
+
+func TestESDKeepsExtensionInScript(t *testing.T) {
+	img := readyImage("win.iso", images.StrategyWimboot, images.BootPlan{
+		Family: "windows",
+		Files:  map[string]string{"boot.wim": "sources/boot.wim", "install": "sources/install.esd"},
+	})
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
+	if !strings.Contains(s, "initrd -n install.esd "+testBase+"/img/win.iso/file/sources/install.esd install.esd") {
+		t.Errorf(".esd must be injected as install.esd:\n%s", s)
+	}
+}
+
+func TestRAMGateRefusesSmallClients(t *testing.T) {
+	img := readyImage("big.iso", images.StrategyLinuxExtract, images.BootPlan{
+		Family: "ubuntu-casper", Kernel: "casper/vmlinuz", Initrds: []string{"casper/initrd"},
+		RAMLoadMB: 6000,
+	})
+	blocked := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 4096)
+	if strings.Contains(blocked, "kernel ") || !strings.Contains(blocked, "only 4096 MB") {
+		t.Errorf("4GB client must be refused a 6GB RAM-load with a clear message:\n%s", blocked)
+	}
+	if !strings.Contains(blocked, "chain "+testBase+"/boot.ipxe") {
+		t.Error("refusal must route back to the menu")
+	}
+	allowed := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 8192)
+	if !strings.Contains(allowed, "kernel ") {
+		t.Errorf("8GB client must boot normally:\n%s", allowed)
+	}
+	unknown := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
+	if !strings.Contains(unknown, "kernel ") {
+		t.Error("unknown RAM must not block the boot")
+	}
+}
+
+func TestMemdiskEFIChain(t *testing.T) {
+	img := readyImage("memtest.iso", images.StrategyMemdisk, images.BootPlan{
+		Family: "unknown", Files: map[string]string{"efi": "EFI/BOOT/BOOTX64.EFI"},
+	})
+	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
+	if !strings.Contains(s, "iseq ${platform} efi && chain "+testBase+"/img/memtest.iso/file/EFI/BOOT/BOOTX64.EFI") {
+		t.Errorf("UEFI clients must chain the standalone EFI app:\n%s", s)
+	}
+	if !strings.Contains(s, "sanboot ") {
+		t.Error("BIOS clients still need the sanboot fallback")
 	}
 }
 

@@ -30,14 +30,19 @@ writability — and streams the server log:
   everything else rides HTTP with range requests — survives hundreds of
   concurrent boots. Native UEFI HTTP Boot supported where firmware allows.
 - **Tiered Boot Strategies** per ISO, chosen automatically at validation:
-  - *LinuxExtract* — Ubuntu (casper), Debian-live (Clonezilla/GParted),
-    archiso (Arch/SystemRescue), Anaconda (Fedora/RHEL/Rocky/Alma),
-    openSUSE/SLES: kernel/initrd extracted server-side, payload over HTTP.
+  - *LinuxExtract* — Ubuntu (casper), Debian-live (Clonezilla/GParted/Kali),
+    Fedora/RHEL live (dracut), Anaconda installers (Fedora/RHEL/Rocky/Alma),
+    archiso (Arch/SystemRescue), openSUSE/SLES, Alpine: kernel/initrd
+    extracted server-side, payload over HTTP.
   - *Wimboot* — Windows 10/11/Server installers, SMB-free: WinPE via wimboot
-    with injected winpeshl.ini/setup script and HTTP-delivered sources.
-  - *Memdisk* — anything else, whole-ISO-into-RAM via iPXE sanboot.
-  - Files are served **directly out of the ISO** (streamed, zero extraction
-    to disk).
+    with injected winpeshl.ini/setup script and HTTP-delivered sources
+    (`install.wim` and `install.esd` both handled).
+  - *Memdisk* — anything else, whole-ISO-into-RAM via iPXE sanboot; small
+    standalone-EFI tool ISOs (memtest86+ style) are chained directly on UEFI.
+  - Clients with too little RAM for a RAM-loading image get a clear message,
+    not a mid-transfer failure. Files are served **directly out of the ISO**
+    (streamed, zero extraction to disk).
+  - Full matrix: [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 - **Crash-only reliability**: config file + image folder are the entire
   source of truth; YAML hot-reloads with last-known-good semantics (a broken
   edit never stops clients booting); an ISO is only offered once fully
