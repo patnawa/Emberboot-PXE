@@ -39,15 +39,22 @@ config view that shows the exact DHCP option 66/67 values for your network.
 
 ## Quick start
 
-```
-# 1) Create a config (see emberboot.example.yaml for every option)
-cp emberboot.example.yaml emberboot.yaml   # set at least: site
+**Windows — double-click `Start-Emberboot.bat`.** It asks for administrator
+access (UDP 67/69), adds the firewall rule, starts the server, and opens the
+management console. There is no setup: the first run creates a working
+`emberboot.yaml` and an `images` folder next to the script — drop ISOs in
+and they appear on the boot menu once validated.
 
-# 2) Drop ISOs into ./images/
+**Linux / manual:**
 
-# 3) Run (needs UDP 67/69 privileges: root, CAP_NET_BIND_SERVICE, or admin)
-./emberbootd -config emberboot.yaml
 ```
+# First run creates emberboot.yaml and ./images automatically.
+# Needs UDP 67/69 privileges: root, CAP_NET_BIND_SERVICE, or admin.
+./emberbootd
+```
+
+Tune the config afterwards (see emberboot.example.yaml for every option) —
+it hot-reloads, so no restart is needed.
 
 Open the dashboard at the configured `dashboard_bind` address. Generate the
 admin password hash with `emberbootd hash-password`.

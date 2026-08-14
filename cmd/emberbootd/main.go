@@ -8,11 +8,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -62,6 +64,42 @@ func hashPassword() {
 	fmt.Println(string(hash))
 }
 
+// createStarterConfig writes a minimal working config on first run, so a
+// fresh install (double-clicked on a new machine) comes up serving instead of
+// erroring. An existing file is never touched.
+func createStarterConfig(path string, log *slog.Logger) error {
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	site, _ := os.Hostname()
+	site = strings.ToLower(site)
+	if site == "" {
+		site = "site-1"
+	}
+	starter := fmt.Sprintf(`# Emberboot configuration — created automatically on first run.
+# Every option is documented in emberboot.example.yaml. This file
+# hot-reloads: edits apply within a second, and an invalid edit is rejected
+# while the last good configuration keeps serving.
+
+site: %s
+
+network:
+  dhcp_mode: proxy            # coexists with your existing DHCP server
+  dashboard_bind: "0.0.0.0:8443"
+
+images:
+  dir: images                 # drop ISOs here
+  answers_dir: answers
+`, site)
+	if err := os.WriteFile(path, []byte(starter), 0o644); err != nil {
+		return fmt.Errorf("create starter config: %w", err)
+	}
+	log.Info("no config file found; created a starter config", "path", path, "site", site)
+	return nil
+}
+
 func run() error {
 	configPath := flag.String("config", "emberboot.yaml", "path to config file")
 	logLevel := flag.String("log-level", "info", "debug|info|warn|error")
@@ -75,6 +113,9 @@ func run() error {
 
 	start := time.Now()
 	boot := logging.New(os.Stdout, logging.ParseLevel(*logLevel), "")
+	if err := createStarterConfig(*configPath, boot); err != nil {
+		return err
+	}
 	mgr, err := config.NewManager(*configPath, boot)
 	if err != nil {
 		return err
