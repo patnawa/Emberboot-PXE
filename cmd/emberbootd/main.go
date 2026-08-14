@@ -112,7 +112,11 @@ func run() error {
 	}
 
 	start := time.Now()
-	boot := logging.New(os.Stdout, logging.ParseLevel(*logLevel), "")
+	// One JSON handler wrapped in a ring buffer: stdout for supervision,
+	// the ring for the dashboard's diagnostics view.
+	ring := logging.NewRing(slog.NewJSONHandler(os.Stdout,
+		&slog.HandlerOptions{Level: logging.ParseLevel(*logLevel)}))
+	boot := slog.New(ring)
 	if err := createStarterConfig(*configPath, boot); err != nil {
 		return err
 	}
@@ -121,7 +125,7 @@ func run() error {
 		return err
 	}
 	cfg := mgr.Current()
-	log := logging.New(os.Stdout, logging.ParseLevel(*logLevel), cfg.Site)
+	log := slog.New(ring).With("site", cfg.Site)
 	log.Info("emberbootd starting", "version", version, "config", *configPath)
 
 	// Advertise IP: what DHCP tells clients to fetch from.
@@ -249,6 +253,7 @@ func run() error {
 			Log: log, Cfg: mgr, Images: imgMgr, Sessions: store, Alerts: notifier,
 			Metrics: m, Version: version, StartTime: start,
 			AdvertiseIP: advertise.String(), HTTPBase: httpBase,
+			LogRing: ring, RogueActive: dhcpServer.RogueDetectionActive,
 		}, bind)
 		go func() { errc <- fmt.Errorf("dashboard: %w", api.Serve()) }()
 		defer api.Close()

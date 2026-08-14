@@ -7,11 +7,21 @@ observability that iVentoy-class tools lack.
 ![Emberboot management console — overview](docs/screenshots/overview.png)
 
 The embedded management console (no external assets, works on an offline
-network): live Boot Session pipelines, hourly boot activity, image states
-with their chosen Boot Strategy and the reason for it, alert history, and a
-config view that shows the exact DHCP option 66/67 values for your network.
+network) is a **full management surface**: live Boot Session pipelines with
+failure-cause hints, hourly boot activity, per-image settings (menu label,
+answer file, strategy, hide), Targeting rules (per-VLAN/per-MAC menus,
+unattended installs, deny lists), an answer-file editor, alert history, and
+settings including sign-in and API tokens. Every edit the UI makes goes
+through `emberboot.yaml` itself — validated, atomic, hot-reloaded (ADR-0004)
+— so hand edits, git diffs, and server rebuilds keep working.
 
-![Emberboot management console — images](docs/screenshots/images.png)
+![Targeting rules](docs/screenshots/targeting.png)
+
+The **Diagnostics** view runs real self-checks — including a live TFTP read
+probe, boot-HTTP loopback, advertise-IP presence, disk, and folder
+writability — and streams the server log:
+
+![Diagnostics](docs/screenshots/diagnostics.png)
 
 - **One static binary** (Go, CGO-free), Linux and Windows, container-friendly.
 - **proxyDHCP** by default: coexists with your existing DHCP server, zero

@@ -89,6 +89,12 @@ func (s *Server) Serve() error {
 	return <-errc
 }
 
+// RogueDetectionActive reports whether the passive udp/68 monitor is running
+// (diagnostics; it is disabled when a DHCP client daemon owns the port).
+func (s *Server) RogueDetectionActive() bool {
+	return s.rogue != nil && s.rogue.conn != nil
+}
+
 // Close stops all listeners.
 func (s *Server) Close() {
 	if s.proxy != nil {

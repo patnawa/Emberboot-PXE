@@ -22,20 +22,18 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 :focus-visible{outline:2px solid var(--ember);outline-offset:2px;border-radius:4px}
 @media (prefers-reduced-motion: reduce){*,*::before,*::after{transition:none!important;animation:none!important}}
 
-/* layout */
-.app{display:grid;grid-template-columns:208px 1fr;min-height:100vh}
-.side{border-right:1px solid var(--hairline);padding:1.1rem .9rem;display:flex;flex-direction:column;gap:1.4rem;position:sticky;top:0;height:100vh}
+.app{display:grid;grid-template-columns:210px 1fr;min-height:100vh}
+.side{border-right:1px solid var(--hairline);padding:1.1rem .9rem;display:flex;flex-direction:column;gap:1.3rem;position:sticky;top:0;height:100vh}
 .brand{display:flex;align-items:center;gap:.55rem;padding:0 .35rem}
-.brand svg{flex:none}
-.brand b{font-size:1rem;letter-spacing:.01em}
+.brand b{font-size:1rem}
 .nav{display:flex;flex-direction:column;gap:2px}
-.nav a{display:flex;align-items:center;gap:.6rem;padding:.5rem .6rem;border-radius:7px;color:var(--ink-2);text-decoration:none;font-weight:500}
+.nav a{display:flex;align-items:center;gap:.6rem;padding:.44rem .6rem;border-radius:7px;color:var(--ink-2);text-decoration:none;font-weight:500;font-size:.86rem}
 .nav a svg{flex:none;opacity:.8}
 .nav a:hover{background:var(--surface);color:var(--ink)}
 .nav a.on{background:var(--ember-soft);color:var(--ember)}
 .side-foot{margin-top:auto;padding:0 .35rem;color:var(--ink-3);font:.72rem var(--mono)}
 .main{min-width:0;padding:1.2rem 1.8rem 3rem}
-.topbar{display:flex;align-items:center;gap:1rem;padding-bottom:1rem;border-bottom:1px solid var(--hairline);margin-bottom:1.3rem}
+.topbar{display:flex;align-items:center;gap:1rem;padding-bottom:1rem;border-bottom:1px solid var(--hairline);margin-bottom:1.3rem;flex-wrap:wrap}
 .topbar h1{font-size:1.1rem;font-weight:600}
 .topbar .spacer{flex:1}
 .pill{display:inline-flex;align-items:center;gap:.45rem;background:var(--surface);border:1px solid var(--hairline);border-radius:99px;padding:.25rem .8rem;font-size:.78rem;color:var(--ink-2)}
@@ -43,12 +41,13 @@ button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
 .dot.down{background:var(--bad)}
 .pill code{font-family:var(--mono);color:var(--ink)}
 
-/* generic */
 .eyebrow{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-3);margin:1.6rem 0 .6rem}
+.eyebrow:first-child{margin-top:0}
 .panel{background:var(--surface);border:1px solid var(--hairline);border-radius:10px}
+.pad{padding:1rem 1.2rem}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.8rem}
 .card{background:var(--surface);border:1px solid var(--hairline);border-radius:10px;padding:.8rem 1rem}
-.card .v{font-size:1.5rem;font-weight:650;letter-spacing:-.01em}
+.card .v{font-size:1.5rem;font-weight:650}
 .card .k{color:var(--ink-2);font-size:.76rem;margin-top:.1rem}
 table{width:100%;border-collapse:collapse}
 th,td{text-align:left;padding:.5rem .8rem;border-bottom:1px solid var(--hairline);vertical-align:middle}
@@ -60,9 +59,9 @@ tr.row:hover td{background:var(--raised)}
 .dim{color:var(--ink-2)}
 .faint{color:var(--ink-3)}
 .chip{display:inline-flex;align-items:center;gap:.35rem;padding:.06rem .55rem;border-radius:99px;font-size:.72rem;font-weight:600;white-space:nowrap}
-.chip.ready,.chip.completed{background:rgba(12,163,12,.13);color:#4cc44c}
-.chip.validating,.chip.active,.chip.stalled{background:rgba(250,178,25,.12);color:var(--warn)}
-.chip.invalid,.chip.failed{background:rgba(208,59,59,.15);color:#e46a6a}
+.chip.ready,.chip.completed,.chip.pass{background:rgba(12,163,12,.13);color:#4cc44c}
+.chip.validating,.chip.active,.chip.stalled,.chip.warn{background:rgba(250,178,25,.12);color:var(--warn)}
+.chip.invalid,.chip.failed,.chip.fail{background:rgba(208,59,59,.15);color:#e46a6a}
 .chip.plain{background:var(--raised);color:var(--ink-2)}
 .empty{padding:2.2rem 1rem;text-align:center;color:var(--ink-2)}
 .empty b{color:var(--ink)}
@@ -70,8 +69,27 @@ tr.row:hover td{background:var(--raised)}
 .btn:hover{border-color:var(--ink-3)}
 .btn.primary{background:var(--ember);border-color:var(--ember);color:#180d05}
 .btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{color:#e46a6a}
+.btn.danger:hover{border-color:var(--bad)}
+.btn.sm{padding:.25rem .6rem;font-size:.74rem}
+.rowbtns{display:flex;gap:.35rem;justify-content:flex-end}
 
-/* boot fuse — the pipeline every PXE boot follows */
+/* forms */
+.field{margin-bottom:.9rem}
+.field label{display:block;font-size:.74rem;font-weight:600;color:var(--ink-2);margin-bottom:.3rem}
+.field .hint{font-size:.72rem;color:var(--ink-3);margin-top:.25rem}
+input[type=text],input[type=password],input[type=number],select,textarea{
+  width:100%;background:var(--page);border:1px solid var(--hairline);border-radius:8px;
+  color:var(--ink);padding:.45rem .7rem;font:.84rem var(--mono)}
+select{font-family:var(--sans)}
+textarea{min-height:12rem;line-height:1.55;resize:vertical}
+input[type=checkbox]{accent-color:var(--ember);width:15px;height:15px}
+.check{display:flex;align-items:center;gap:.55rem;font-size:.84rem}
+.formrow{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+.actions{display:flex;gap:.6rem;margin-top:1.1rem;align-items:center}
+.tag{font-size:.66rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--warn);border:1px solid var(--warn);border-radius:5px;padding:.05rem .4rem}
+
+/* boot fuse */
 .fuse{display:inline-flex;align-items:center}
 .fuse i{width:7px;height:7px;border-radius:50%;background:var(--hairline);flex:none}
 .fuse i.lit{background:var(--ember)}
@@ -82,7 +100,7 @@ tr.row:hover td{background:var(--raised)}
 .fuse s.lit{background:var(--ember)}
 
 /* chart */
-.chartwrap{position:relative;padding:1rem 1.1rem 0.6rem}
+.chartwrap{position:relative;padding:1rem 1.1rem .6rem}
 .legend{display:flex;gap:1.1rem;padding:.2rem 1.1rem .8rem;font-size:.76rem;color:var(--ink-2)}
 .legend b{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:.4rem}
 .tip{position:absolute;pointer-events:none;background:var(--raised);border:1px solid var(--hairline);border-radius:8px;padding:.5rem .7rem;font-size:.76rem;display:none;z-index:5;box-shadow:0 6px 20px rgba(0,0,0,.45);min-width:9rem}
@@ -90,7 +108,6 @@ tr.row:hover td{background:var(--raised)}
 .tip .r{display:flex;justify-content:space-between;gap:1rem}
 .tip .r b{font-weight:400}
 
-/* toolbar (sessions) */
 .toolbar{display:flex;gap:.6rem;align-items:center;margin-bottom:.9rem;flex-wrap:wrap}
 .search{background:var(--surface);border:1px solid var(--hairline);border-radius:8px;color:var(--ink);padding:.45rem .8rem;font:.82rem var(--mono);width:16rem}
 .search::placeholder{color:var(--ink-3);font-family:var(--sans)}
@@ -101,7 +118,7 @@ tr.row:hover td{background:var(--raised)}
 /* drawer */
 .scrim{position:fixed;inset:0;background:rgba(8,6,4,.6);opacity:0;pointer-events:none;transition:opacity .16s;z-index:20}
 .scrim.open{opacity:1;pointer-events:auto}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(460px,94vw);background:var(--surface);border-left:1px solid var(--hairline);transform:translateX(102%);transition:transform .16s ease-out;z-index:21;display:flex;flex-direction:column}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(500px,96vw);background:var(--surface);border-left:1px solid var(--hairline);transform:translateX(102%);transition:transform .16s ease-out;z-index:21;display:flex;flex-direction:column}
 .drawer.open{transform:none}
 .drawer-h{display:flex;align-items:center;gap:.8rem;padding:1rem 1.2rem;border-bottom:1px solid var(--hairline)}
 .drawer-h h2{font-size:.95rem;min-width:0;overflow-wrap:anywhere}
@@ -111,7 +128,6 @@ tr.row:hover td{background:var(--raised)}
 .kv dt{color:var(--ink-3)}
 .kv dd{overflow-wrap:anywhere}
 pre.code{background:var(--page);border:1px solid var(--hairline);border-radius:8px;padding:.7rem .9rem;font:.78rem/1.55 var(--mono);overflow-x:auto;white-space:pre}
-.copyrow{display:flex;justify-content:flex-end;margin:.4rem 0 1rem}
 .tl{border-left:2px solid var(--hairline);margin:.4rem 0 0 .4rem;padding-left:1.1rem;display:flex;flex-direction:column;gap:.75rem}
 .tl .e{position:relative}
 .tl .e::before{content:"";position:absolute;left:calc(-1.1rem - 6px);top:.35rem;width:8px;height:8px;border-radius:50%;background:var(--ember)}
@@ -119,22 +135,33 @@ pre.code{background:var(--page);border:1px solid var(--hairline);border-radius:8
 .tl .e.term-bad::before{background:var(--bad)}
 .tl .meta{font:.72rem var(--mono);color:var(--ink-3)}
 .tl .stage{font-weight:600;font-size:.78rem;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em;margin-right:.5rem}
+.hintbox{background:rgba(250,178,25,.08);border:1px solid rgba(250,178,25,.4);border-radius:8px;padding:.7rem .9rem;font-size:.8rem;margin-bottom:1rem}
+.hintbox b{color:var(--warn)}
 
-/* toast */
-.toast{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--raised);border:1px solid var(--hairline);border-left:3px solid var(--ok);border-radius:8px;padding:.7rem 1rem;font-size:.82rem;z-index:30;display:none;max-width:26rem}
+/* diagnostics */
+.checks .c{display:flex;gap:.8rem;padding:.55rem .9rem;border-bottom:1px solid var(--hairline);align-items:baseline}
+.checks .c:last-child{border-bottom:none}
+.checks .name{min-width:11rem;font-weight:600;font-size:.84rem}
+.checks .detail{color:var(--ink-2);font-size:.8rem}
+.loglines{font:.76rem/1.6 var(--mono);padding:.6rem .9rem;max-height:24rem;overflow-y:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.loglines .WARN{color:var(--warn)}
+.loglines .ERROR{color:#e46a6a}
+.loglines .DEBUG{color:var(--ink-3)}
+.loglines .t{color:var(--ink-3)}
+
+.toast{position:fixed;bottom:1.2rem;right:1.2rem;background:var(--raised);border:1px solid var(--hairline);border-left:3px solid var(--ok);border-radius:8px;padding:.7rem 1rem;font-size:.82rem;z-index:30;display:none;max-width:28rem;overflow-wrap:anywhere}
 .toast.err{border-left-color:var(--bad)}
-
-/* banner */
 .banner{display:none;background:rgba(208,59,59,.1);border:1px solid var(--bad);border-radius:10px;padding:.8rem 1rem;margin-bottom:1.2rem}
 .banner b{color:#e46a6a}
 .banner pre{margin-top:.4rem;font:.76rem/1.5 var(--mono);white-space:pre-wrap;color:var(--ink-2)}
 
-@media (max-width:860px){
+@media (max-width:900px){
   .app{grid-template-columns:1fr}
-  .side{position:static;height:auto;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--hairline)}
+  .side{position:static;height:auto;flex-direction:row;align-items:center;border-right:none;border-bottom:1px solid var(--hairline);flex-wrap:wrap}
   .nav{flex-direction:row;flex-wrap:wrap}
   .side-foot{display:none}
   .main{padding:1rem}
+  .formrow{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -152,7 +179,10 @@ pre.code{background:var(--page);border:1px solid var(--hairline);border-radius:8
       <a href="#overview" data-view="overview"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1.5" y="1.5" width="5.4" height="5.4" rx="1"/><rect x="9.1" y="1.5" width="5.4" height="5.4" rx="1"/><rect x="1.5" y="9.1" width="5.4" height="5.4" rx="1"/><rect x="9.1" y="9.1" width="5.4" height="5.4" rx="1"/></svg>Overview</a>
       <a href="#images" data-view="images"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.2"/><circle cx="8" cy="8" r="1.6"/></svg>Images</a>
       <a href="#sessions" data-view="sessions"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/></svg>Boot sessions</a>
+      <a href="#targeting" data-view="targeting"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="5.5"/><path d="M8 1v3M8 12v3M1 8h3M12 8h3"/></svg>Targeting</a>
+      <a href="#answers" data-view="answers"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 1.5h5.5L13 5v9.5H4z"/><path d="M9.5 1.5V5H13M6 8.5h4M6 11h4"/></svg>Answer files</a>
       <a href="#alerts" data-view="alerts"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2a4 4 0 0 1 4 4c0 3 1 4 1.5 4.5h-11C3 10 4 9 4 6a4 4 0 0 1 4-4z"/><path d="M6.6 13a1.5 1.5 0 0 0 2.8 0"/></svg>Alerts</a>
+      <a href="#diagnostics" data-view="diagnostics"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 9h3l1.5-5 3 8 1.5-3h4"/></svg>Diagnostics</a>
       <a href="#config" data-view="config"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 4.5h8M12.5 4.5H14M2 11.5h3M7.5 11.5H14"/><circle cx="10.5" cy="4.5" r="1.8"/><circle cx="5.5" cy="11.5" r="1.8"/></svg>Config</a>
     </nav>
     <div class="side-foot" id="foot">–</div>
@@ -183,30 +213,55 @@ pre.code{background:var(--page);border:1px solid var(--hairline);border-radius:8
 
 <script>
 "use strict";
-/* ── tiny helpers ───────────────────────────────────────────────────── */
+/* ── helpers ────────────────────────────────────────────────────────── */
 const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
 const esc=v=>String(v??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtSize=b=>b>=1e9?(b/1e9).toFixed(1)+" GB":b>=1e6?(b/1e6).toFixed(0)+" MB":Math.round((b||0)/1e3)+" kB";
 const fmtT=s=>new Date(s).toLocaleString([], {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
 const fmtClock=s=>new Date(s).toLocaleTimeString([], {hour12:false});
 const fmtUp=s=>s>=86400?`${Math.floor(s/86400)}d ${Math.floor(s%86400/3600)}h`:s>=3600?`${Math.floor(s/3600)}h ${Math.floor(s%3600/60)}m`:`${Math.floor(s/60)}m ${s%60}s`;
-async function j(u,opt){const r=await fetch(u,opt);if(!r.ok)throw new Error(`${u} → ${r.status}`);return r.json()}
-function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast"+(err?" err":"");t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",4000)}
+async function j(u,opt){
+  const r=await fetch(u,opt);
+  if(!r.ok){
+    let msg=`${r.status}`;
+    try{const b=await r.json();if(b.error)msg=b.error}catch(_){/* not json */}
+    throw new Error(msg);
+  }
+  return r.headers.get("content-type")?.includes("json")?r.json():r.text();
+}
+const api={
+  patch:ops=>j("/api/config",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({ops})}),
+  post:(u,body)=>j(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})}),
+  put:(u,body)=>j(u,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}),
+  putText:(u,text)=>j(u,{method:"PUT",body:text}),
+  del:u=>j(u,{method:"DELETE"}),
+};
+function toast(msg,err){const t=$("#toast");t.textContent=msg;t.className="toast"+(err?" err":"");t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",err?7000:3500)}
 function copy(text,label){navigator.clipboard?.writeText(text).then(()=>toast(label+" copied"),()=>toast("Copy failed — select the text manually",true))}
 
 /* ── state ──────────────────────────────────────────────────────────── */
 const S={view:"overview",health:null,images:[],sessions:[],alerts:[],activity:[],config:null,
-        q:"",filter:"all",connected:false};
+        cfgFull:null,answers:[],q:"",filter:"all",connected:false};
+/* Views that hold form state are never auto re-rendered — a poll must not
+   eat an admin's unsaved edits. */
+const LIVE_VIEWS=new Set(["overview","images","sessions","alerts"]);
 
-/* ── data refresh (5s, paused while tab is hidden) ──────────────────── */
 async function refresh(){
   try{
-    const [h,imgs,sess,al,act,cfg]=await Promise.all([
+    const [h,imgs,sess,al,act,cfg,full,ans]=await Promise.all([
       j("/api/health"),j("/api/images"),j("/api/sessions?limit=200"),
-      j("/api/alerts"),j("/api/activity?hours=24"),j("/api/config")]);
-    Object.assign(S,{health:h,images:imgs,sessions:sess,alerts:al,activity:act,config:cfg,connected:true});
+      j("/api/alerts"),j("/api/activity?hours=24"),j("/api/config"),
+      j("/api/config/full"),j("/api/answers")]);
+    Object.assign(S,{health:h,images:imgs,sessions:sess,alerts:al,activity:act,config:cfg,cfgFull:full,answers:ans,connected:true});
   }catch(e){S.connected=false}
-  paintChrome();render();
+  paintChrome();
+  // First successful load repaints whatever view is open (it rendered empty
+  // before data existed); after that, only live views auto-refresh so form
+  // edits are never eaten by a poll.
+  const firstData=S.connected&&!S.painted;
+  if(firstData)S.painted=true;
+  if((firstData||LIVE_VIEWS.has(S.view))&&!$("#drawer").classList.contains("open"))render();
 }
 function paintChrome(){
   const h=S.health;
@@ -222,17 +277,22 @@ setInterval(()=>{if(!document.hidden)refresh()},5000);
 document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
 
 /* ── router ─────────────────────────────────────────────────────────── */
-const TITLES={overview:"Overview",images:"Images",sessions:"Boot sessions",alerts:"Alerts",config:"Config"};
+const TITLES={overview:"Overview",images:"Images",sessions:"Boot sessions",targeting:"Targeting",
+              answers:"Answer files",alerts:"Alerts",diagnostics:"Diagnostics",config:"Config"};
 function route(){
   const v=(location.hash||"#overview").slice(1);
   S.view=TITLES[v]?v:"overview";
-  document.querySelectorAll(".nav a").forEach(a=>a.classList.toggle("on",a.dataset.view===S.view));
+  $$(".nav a").forEach(a=>a.classList.toggle("on",a.dataset.view===S.view));
   $("#view-title").textContent=TITLES[S.view];
+  stopLogFollow();
   render();
 }
 window.addEventListener("hashchange",route);
 
-/* ── the boot fuse: the fixed pipeline every PXE boot follows ───────── */
+const views={};
+function render(){(views[S.view]||views.overview)()}
+
+/* ── boot fuse ──────────────────────────────────────────────────────── */
 const STAGES=["dhcp","tftp","script","payload"];
 function fuse(sess){
   const seen=new Set(sess.stages||[]);
@@ -249,10 +309,8 @@ function fuse(sess){
 function resultChip(r){return r?`<span class="chip ${esc(r)}">${r==="completed"?"✓ ":r==="stalled"?"⚠ ":"✕ "}${esc(r)}</span>`
                               :'<span class="chip active">● in progress</span>'}
 
-/* ── views ──────────────────────────────────────────────────────────── */
-const views={};
-function render(){(views[S.view]||views.overview)()}
-function overview(){
+/* ── overview ───────────────────────────────────────────────────────── */
+views.overview=function(){
   const h=S.health||{},ready=S.images.filter(i=>i.state==="ready").length;
   const day=Date.now()-864e5,al24=S.alerts.filter(a=>+new Date(a.time)>day).length;
   $("#view").innerHTML=`
@@ -272,33 +330,83 @@ function overview(){
       </div>
     </div>
     <div class="eyebrow">Latest boot sessions</div>
-    <div class="panel">${sessionTable(S.sessions.slice(0,8),true)}</div>`;
+    <div class="panel">${sessionTable(S.sessions.slice(0,8))}</div>`;
   drawChart($("#chart"),S.activity);
   bindSessionRows();
-}
-views.overview=overview;
+};
 
-function images(){
+/* ── images ─────────────────────────────────────────────────────────── */
+views.images=function(){
   const rows=S.images.map((i,n)=>`<tr class="row" data-img="${n}" tabindex="0">
     <td><div>${esc(i.display_name)}${i.disabled?' <span class="faint">(hidden from menu)</span>':""}</div>
         <div class="mono faint">${esc(i.file_name)}</div></td>
     <td><span class="chip ${esc(i.state)}">${esc(i.state)}</span></td>
     <td class="mono">${esc(i.strategy||"–")}</td>
     <td class="mono">${esc(i.plan?.family||"–")}</td>
+    <td class="mono">${esc(i.answer_file||"–")}</td>
     <td class="mono">${fmtSize(i.size_bytes)}</td></tr>`).join("");
   $("#view").innerHTML=`<div class="panel"><table>
-    <thead><tr><th>Image</th><th>State</th><th>Strategy</th><th>Family</th><th>Size</th></tr></thead>
-    <tbody>${rows||""}</tbody></table>
+    <thead><tr><th>Image</th><th>State</th><th>Strategy</th><th>Family</th><th>Answer file</th><th>Size</th></tr></thead>
+    <tbody>${rows}</tbody></table>
     ${rows?"":`<div class="empty"><b>No ISOs yet.</b><br>Drop one into the images folder on the server — it appears here as soon as it's validated.</div>`}</div>`;
-  document.querySelectorAll("[data-img]").forEach(el=>{
+  $$("[data-img]").forEach(el=>{
     const open=()=>imageDrawer(S.images[+el.dataset.img]);
     el.addEventListener("click",open);
     el.addEventListener("keydown",e=>{if(e.key==="Enter")open()});
   });
-}
-views.images=images;
+};
 
-function sessions(){
+function imageDrawer(i){
+  const p=i.plan||{};
+  const ansOpts=['<option value="">none</option>',
+    ...S.answers.map(a=>`<option value="${esc(a.name)}" ${a.name===i.answer_file?"selected":""}>${esc(a.name)}</option>`)].join("");
+  openDrawer(i.display_name,`
+    <dl class="kv">
+      <dt>File</dt><dd class="mono">${esc(i.file_name)}</dd>
+      <dt>State</dt><dd><span class="chip ${esc(i.state)}">${esc(i.state)}</span></dd>
+      <dt>Strategy</dt><dd class="mono">${esc(i.strategy||"–")} <span class="faint">(${esc(p.family||"–")})</span></dd>
+      <dt>Size</dt><dd class="mono">${fmtSize(i.size_bytes)}</dd>
+    </dl>
+    <div class="eyebrow" style="margin-top:0">Why this strategy</div>
+    <p class="dim" style="font-size:.82rem;margin-bottom:1rem">${esc(i.reason)}</p>
+    ${p.kernel?`<pre class="code">kernel  ${esc(p.kernel)}\n${(p.initrds||[]).map(x=>"initrd  "+esc(x)).join("\n")}\nargs    ${esc(p.args||"")}</pre>`:""}
+    ${p.files?`<pre class="code">${esc(Object.entries(p.files).map(([k,v])=>k.padEnd(10)+v).join("\n"))}</pre>`:""}
+    <div class="eyebrow">Settings</div>
+    <div class="field"><label for="f-dn">Menu label</label><input type="text" id="f-dn" value="${esc(i.display_name)}"></div>
+    <div class="field"><label for="f-ans">Answer file (unattended install)</label>
+      <select id="f-ans">${ansOpts}</select>
+      <div class="hint">Create and edit answer files under Answer files.</div></div>
+    <div class="formrow">
+      <div class="field"><label for="f-strat">Boot strategy</label>
+        <select id="f-strat">
+          <option value="">auto (detected)</option>
+          ${["linux-extract","wimboot","memdisk"].map(x=>`<option ${x===((S.cfgFull?.config?.images?.attach||{})[i.file_name]?.strategy||"")?"selected":""}>${x}</option>`).join("")}
+        </select></div>
+      <div class="field"><label for="f-args">Extra kernel arguments</label>
+        <input type="text" id="f-args" value="${esc(i.extra_kernel_args||((S.cfgFull?.config?.images?.attach||{})[i.file_name]?.kernel_args||""))}"></div>
+    </div>
+    <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="f-dis" ${i.disabled?"checked":""}> Hide from boot menu</label>
+    <div class="actions">
+      <button class="btn primary" id="f-save">Save image settings</button>
+    </div>`);
+  $("#f-save").addEventListener("click",async()=>{
+    const attach={};
+    const dn=$("#f-dn").value.trim();if(dn&&dn!==friendly(i.file_name))attach.display_name=dn;
+    const ans=$("#f-ans").value;if(ans)attach.answer_file=ans;
+    if($("#f-dis").checked)attach.disabled=true;
+    const st=$("#f-strat").value;if(st)attach.strategy=st;
+    const ka=$("#f-args").value.trim();if(ka)attach.kernel_args=ka;
+    const op=Object.keys(attach).length
+      ?{path:["images","attach",i.file_name],value:attach}
+      :{path:["images","attach",i.file_name],delete:true};
+    try{await api.patch([op]);toast("Image settings saved");closeDrawer();refresh()}
+    catch(e){toast("Not saved — "+e.message,true)}
+  });
+}
+function friendly(f){return f.replace(/\.iso$/i,"").replace(/[_-]/g," ")}
+
+/* ── sessions ───────────────────────────────────────────────────────── */
+views.sessions=function(){
   const q=S.q.toLowerCase();
   let list=S.sessions.filter(s=>!q||s.mac.includes(q)||s.ip.includes(q)||(s.image||"").toLowerCase().includes(q));
   if(S.filter==="active")list=list.filter(s=>!s.result);
@@ -312,16 +420,14 @@ function sessions(){
       </div>
       <span class="dim" style="font-size:.78rem">${list.length} of ${S.sessions.length}</span>
     </div>
-    <div class="panel">${sessionTable(list,false)}</div>`;
+    <div class="panel">${sessionTable(list)}</div>`;
   const qi=$("#q");
-  qi.addEventListener("input",()=>{S.q=qi.value;const p=qi.selectionStart;sessions();const nq=$("#q");nq.focus();nq.setSelectionRange(p,p)});
-  document.querySelectorAll("[data-f]").forEach(b=>b.addEventListener("click",()=>{S.filter=b.dataset.f;sessions()}));
+  qi.addEventListener("input",()=>{S.q=qi.value;const p=qi.selectionStart;views.sessions();const nq=$("#q");nq.focus();nq.setSelectionRange(p,p)});
+  $$("[data-f]").forEach(b=>b.addEventListener("click",()=>{S.filter=b.dataset.f;views.sessions()}));
   bindSessionRows();
-}
-views.sessions=sessions;
-
-function sessionTable(list,compact){
-  if(!list.length)return `<div class="empty"><b>No boot sessions${S.q||S.filter!=="all"?" match":""} yet.</b><br>${S.q||S.filter!=="all"?"Adjust the search or filter above.":"PXE-boot any machine on this network and its journey shows up here live."}</div>`;
+};
+function sessionTable(list){
+  if(!list.length)return `<div class="empty"><b>No boot sessions${S.q||S.filter!=="all"?" match":" yet"}.</b><br>${S.q||S.filter!=="all"?"Adjust the search or filter above.":"PXE-boot any machine on this network and its journey shows up here live."}</div>`;
   return `<table><thead><tr><th>Started</th><th>MAC</th><th>IP</th><th>Pipeline</th><th>Image</th><th>Result</th></tr></thead><tbody>
   ${list.map(s=>`<tr class="row" data-sid="${s.id}" tabindex="0">
     <td class="mono dim">${fmtT(s.started_at)}</td>
@@ -332,14 +438,175 @@ function sessionTable(list,compact){
     <td>${resultChip(s.result)}</td></tr>`).join("")}</tbody></table>`;
 }
 function bindSessionRows(){
-  document.querySelectorAll("[data-sid]").forEach(el=>{
+  $$("[data-sid]").forEach(el=>{
     const open=()=>sessionDrawer(+el.dataset.sid);
     el.addEventListener("click",open);
     el.addEventListener("keydown",e=>{if(e.key==="Enter")open()});
   });
 }
 
-function alerts(){
+/* Failure hints: keyed by the last pipeline stage that was reached. */
+const HINTS={
+  dhcp:"The machine got the PXE answer but never fetched the bootloader. Usually the client's VLAN cannot reach UDP 69 (TFTP) on this server — check firewalls and IP helpers, or verify DHCP options 66/67 in options66-67 mode.",
+  tftp:"The bootloader was delivered but the boot menu was never fetched. The boot HTTP port is probably blocked from that client's VLAN — check firewalls between the VLAN and this server.",
+  script:"The menu was delivered but no payload transfer started. Either nobody picked an entry before the machine was turned off, or the chosen image failed to start — check the image's state under Images.",
+  payload:"The payload transfer started but never finished. Usually a network interruption, the client running out of RAM for a RAM-loaded image, or the machine being powered off mid-install.",
+};
+function lastStage(evs){let last="";for(const e of evs||[])if(STAGES.includes(e.stage))last=e.stage;return last}
+
+async function sessionDrawer(id){
+  let s;try{s=await j("/api/sessions/"+id)}catch(e){toast("Could not load session "+id,true);return}
+  const evs=s.events||[];
+  const t0=evs.length?+new Date(evs[0].at):0;
+  const failed=s.result==="failed"||s.result==="stalled";
+  const hint=failed?HINTS[lastStage(evs)]:"";
+  openDrawer(`${s.mac}`,`
+    <dl class="kv">
+      <dt>Result</dt><dd>${resultChip(s.result)}</dd>
+      <dt>Started</dt><dd>${fmtT(s.started_at)}</dd>
+      <dt>IP</dt><dd class="mono">${esc(s.ip||"–")}</dd>
+      <dt>Firmware</dt><dd class="mono">${esc(s.firmware||"–")}</dd>
+      <dt>Image</dt><dd class="mono">${esc(s.image||"–")}</dd>
+      <dt>Strategy</dt><dd class="mono">${esc(s.strategy||"–")}</dd>
+    </dl>
+    ${hint?`<div class="hintbox"><b>Likely cause:</b> ${esc(hint)}</div>`:""}
+    <div class="eyebrow" style="margin-top:0">Timeline</div>
+    <div class="tl">${evs.map(e=>{
+      const dt=((+new Date(e.at)-t0)/1000);
+      const term=e.stage==="complete"?"term-ok":e.stage==="fail"?"term-bad":"";
+      return `<div class="e ${term}"><span class="stage">${esc(e.stage)}</span>${esc(e.detail)}
+        <div class="meta">${fmtClock(e.at)} · +${dt<60?dt.toFixed(1)+"s":Math.floor(dt/60)+"m "+Math.round(dt%60)+"s"}</div></div>`;
+    }).join("")||'<div class="dim">No events recorded for this session.</div>'}</div>`);
+}
+
+/* ── targeting (Overrides) ──────────────────────────────────────────── */
+function currentOverrides(){return (S.cfgFull?.config?.overrides||[]).map(o=>({...o}))}
+views.targeting=function(){
+  const ovs=currentOverrides();
+  const rows=ovs.map((o,i)=>`<tr>
+    <td class="mono dim">${i+1}</td>
+    <td>${esc(o.name||"unnamed")}</td>
+    <td class="mono">${esc(o.mac||"")}${o.mac&&o.subnet?" + ":""}${esc(o.subnet||"")||(o.mac?"":"–")}</td>
+    <td>${o.deny?'<span class="chip failed">✕ deny boot</span>':o.menu?.length?`<span class="chip plain">${o.menu.length} image${o.menu.length>1?"s":""}</span>`:'<span class="chip plain">full menu</span>'}</td>
+    <td class="mono dim">${esc(o.answer_file||"–")}</td>
+    <td><div class="rowbtns">
+      <button class="btn sm" data-up="${i}" ${i===0?"disabled":""} aria-label="Move up">↑</button>
+      <button class="btn sm" data-down="${i}" ${i===ovs.length-1?"disabled":""} aria-label="Move down">↓</button>
+      <button class="btn sm" data-edit="${i}">Edit</button>
+      <button class="btn sm danger" data-del="${i}">Delete</button>
+    </div></td></tr>`).join("");
+  $("#view").innerHTML=`
+    <div class="toolbar">
+      <button class="btn primary" id="ov-add">Add rule</button>
+      <span class="dim" style="font-size:.78rem">Rules match top to bottom — the first match wins. Machines matching no rule get the full menu${S.cfgFull?.config?.security?.allow_unknown_macs===false?" <b>(currently: denied — lockdown is on)</b>":""}.</span>
+    </div>
+    <div class="panel"><table>
+      <thead><tr><th>#</th><th>Rule</th><th>Matches</th><th>Effect</th><th>Answer file</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      ${rows?"":`<div class="empty"><b>No targeting rules.</b><br>Add one to give a VLAN or specific machines their own menu, answer file, or to deny boot service.</div>`}</div>`;
+  $("#ov-add").addEventListener("click",()=>overrideDrawer(ovs,-1));
+  $$("[data-edit]").forEach(b=>b.addEventListener("click",()=>overrideDrawer(ovs,+b.dataset.edit)));
+  $$("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
+    const i=+b.dataset.del;
+    if(!confirm(`Delete rule "${ovs[i].name||"unnamed"}"?`))return;
+    ovs.splice(i,1);
+    saveOverrides(ovs,"Rule deleted");
+  }));
+  const move=(i,d)=>{const [o]=ovs.splice(i,1);ovs.splice(i+d,0,o);saveOverrides(ovs,"Rule order saved")};
+  $$("[data-up]").forEach(b=>b.addEventListener("click",()=>move(+b.dataset.up,-1)));
+  $$("[data-down]").forEach(b=>b.addEventListener("click",()=>move(+b.dataset.down,1)));
+};
+async function saveOverrides(ovs,msg){
+  try{await api.patch([{path:["overrides"],value:ovs}]);toast(msg);await refresh();render()}
+  catch(e){toast("Not saved — "+e.message,true)}
+}
+function overrideDrawer(ovs,idx){
+  const o=idx>=0?ovs[idx]:{name:"",mac:"",subnet:"",deny:false,menu:null,answer_file:""};
+  const imgChecks=S.images.map(i=>`<label class="check" style="margin:.2rem 0">
+    <input type="checkbox" class="ov-menu" value="${esc(i.file_name)}" ${o.menu?.includes(i.file_name)?"checked":""}>
+    <span class="mono" style="font-size:.78rem">${esc(i.file_name)}</span></label>`).join("");
+  const ansOpts=['<option value="">none</option>',
+    ...S.answers.map(a=>`<option ${a.name===o.answer_file?"selected":""}>${esc(a.name)}</option>`)].join("");
+  openDrawer(idx>=0?"Edit rule":"Add rule",`
+    <div class="field"><label for="ov-name">Rule name</label><input type="text" id="ov-name" value="${esc(o.name)}" placeholder="lab-vlan"></div>
+    <div class="formrow">
+      <div class="field"><label for="ov-mac">MAC pattern</label><input type="text" id="ov-mac" value="${esc(o.mac||"")}" placeholder="aa:bb:cc:*">
+        <div class="hint">* matches the rest, ? one digit. Leave empty to match by subnet only.</div></div>
+      <div class="field"><label for="ov-subnet">Subnet (CIDR)</label><input type="text" id="ov-subnet" value="${esc(o.subnet||"")}" placeholder="10.1.2.0/24"></div>
+    </div>
+    <label class="check" style="margin-bottom:1rem"><input type="checkbox" id="ov-deny" ${o.deny?"checked":""}> Deny boot service to matching machines</label>
+    <div class="field" id="ov-menu-wrap"><label>Limit the boot menu to these images <span class="faint">(none checked = full menu)</span></label>
+      ${imgChecks||'<div class="hint">No images yet.</div>'}</div>
+    <div class="field"><label for="ov-ans">Answer file for matching machines</label><select id="ov-ans">${ansOpts}</select></div>
+    <div class="actions">
+      <button class="btn primary" id="ov-save">${idx>=0?"Save rule":"Add rule"}</button>
+    </div>`);
+  $("#ov-save").addEventListener("click",()=>{
+    const n={name:$("#ov-name").value.trim()};
+    const mac=$("#ov-mac").value.trim(),sub=$("#ov-subnet").value.trim();
+    if(mac)n.mac=mac;if(sub)n.subnet=sub;
+    if($("#ov-deny").checked)n.deny=true;
+    else{
+      const menu=$$(".ov-menu:checked").map(c=>c.value);
+      if(menu.length)n.menu=menu;
+      const ans=$("#ov-ans").value;if(ans)n.answer_file=ans;
+    }
+    if(!n.mac&&!n.subnet){toast("A rule needs a MAC pattern or a subnet to match on",true);return}
+    if(idx>=0)ovs[idx]=n;else ovs.push(n);
+    closeDrawer();
+    saveOverrides(ovs,idx>=0?"Rule saved":"Rule added");
+  });
+}
+
+/* ── answer files ───────────────────────────────────────────────────── */
+views.answers=function(){
+  const rows=S.answers.map(a=>`<tr class="row" data-ans="${esc(a.name)}" tabindex="0">
+    <td class="mono">${esc(a.name)}</td><td class="mono dim">${fmtSize(a.size)}</td>
+    <td class="mono dim">${fmtT(a.mod_time)}</td>
+    <td><div class="rowbtns"><button class="btn sm danger" data-ansdel="${esc(a.name)}">Delete</button></div></td></tr>`).join("");
+  $("#view").innerHTML=`
+    <div class="toolbar">
+      <button class="btn primary" id="ans-new">New answer file</button>
+      <span class="dim" style="font-size:.78rem">autounattend.xml, autoinstall YAML, kickstart, preseed — assign them to images or targeting rules. \${mac}, \${site} and \${ip} are substituted per machine.</span>
+    </div>
+    <div class="panel"><table>
+      <thead><tr><th>File</th><th>Size</th><th>Changed</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      ${rows?"":`<div class="empty"><b>No answer files yet.</b><br>Create one to run unattended installs.</div>`}</div>`;
+  $("#ans-new").addEventListener("click",()=>answerDrawer(""));
+  $$("[data-ans]").forEach(el=>{
+    const open=()=>answerDrawer(el.dataset.ans);
+    el.addEventListener("click",e=>{if(!e.target.closest("[data-ansdel]"))open()});
+    el.addEventListener("keydown",e=>{if(e.key==="Enter")open()});
+  });
+  $$("[data-ansdel]").forEach(b=>b.addEventListener("click",async()=>{
+    const name=b.dataset.ansdel;
+    if(!confirm(`Delete ${name}? Images and rules pointing at it will stop offering it.`))return;
+    try{await api.del("/api/answers/"+encodeURIComponent(name));toast("Deleted "+name);await refresh();render()}
+    catch(e){toast("Delete failed — "+e.message,true)}
+  }));
+};
+async function answerDrawer(name){
+  let content="";
+  if(name){try{content=await j("/api/answers/"+encodeURIComponent(name))}catch(e){toast("Could not load "+name,true);return}}
+  openDrawer(name||"New answer file",`
+    ${name?"":`<div class="field"><label for="ans-name">File name</label>
+      <input type="text" id="ans-name" placeholder="autounattend.xml">
+      <div class="hint">Letters, digits, dot, dash, underscore.</div></div>`}
+    <div class="field"><label for="ans-content">Content</label>
+      <textarea id="ans-content" spellcheck="false">${esc(content)}</textarea>
+      <div class="hint">\${mac}, \${site}, \${ip} are replaced per machine when served.</div></div>
+    <div class="actions"><button class="btn primary" id="ans-save">Save file</button></div>`);
+  $("#ans-save").addEventListener("click",async()=>{
+    const n=name||$("#ans-name").value.trim();
+    if(!n){toast("Give the file a name",true);return}
+    try{await api.putText("/api/answers/"+encodeURIComponent(n),$("#ans-content").value);
+      toast("Saved "+n);closeDrawer();await refresh();if(S.view==="answers")render()}
+    catch(e){toast("Not saved — "+e.message,true)}
+  });
+}
+
+/* ── alerts ─────────────────────────────────────────────────────────── */
+views.alerts=function(){
   const rows=S.alerts.slice().reverse().map(a=>`<tr>
     <td class="mono dim">${fmtT(a.time)}</td>
     <td><span class="chip ${a.kind==="rogue_pxe_server"||a.kind==="crash_restart"?"failed":"stalled"}">${esc(a.kind.replace(/_/g," "))}</span></td>
@@ -347,57 +614,198 @@ function alerts(){
   $("#view").innerHTML=`<div class="panel"><table>
     <thead><tr><th>Time</th><th>Kind</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>
     ${rows?"":`<div class="empty"><b>Nothing to report.</b><br>Alerts appear here for crash restarts, invalid images, boot-failure spikes, low disk space, rejected config edits, and rogue PXE servers.</div>`}</div>`;
-}
-views.alerts=alerts;
+};
 
-function config(){
-  const h=S.health||{},c=S.config||{};
-  const bios="undionly.kpxe",uefi="snponly.efi";
+/* ── diagnostics ────────────────────────────────────────────────────── */
+let logTimer=null;
+function stopLogFollow(){if(logTimer){clearInterval(logTimer);logTimer=null}}
+views.diagnostics=function(){
   $("#view").innerHTML=`
-    <div class="eyebrow">Configuration file</div>
-    <div class="panel" style="padding:1rem 1.2rem">
-      <dl class="kv">
-        <dt>File</dt><dd class="mono">${esc(c.path||"–")}</dd>
-        <dt>Loaded</dt><dd>${c.loaded_at?fmtT(c.loaded_at):"–"}</dd>
+    <div class="toolbar">
+      <button class="btn primary" id="diag-run">Run checks again</button>
+      <span class="dim" id="diag-when" style="font-size:.78rem"></span>
+    </div>
+    <div class="panel checks" id="diag-checks"><div class="empty">Running checks…</div></div>
+    <div class="eyebrow">Live log <span class="faint">(newest last)</span></div>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="Log level">
+        ${["debug","info","warn","error"].map(l=>`<button data-lvl="${l}" class="${l==="info"?"on":""}">${l}</button>`).join("")}
+      </div>
+    </div>
+    <div class="panel"><div class="loglines" id="loglines">Loading…</div></div>`;
+  let level="info";
+  const runChecks=async()=>{
+    try{
+      const d=await j("/api/diagnostics");
+      $("#diag-when").textContent="checked "+fmtClock(d.ran_at);
+      $("#diag-checks").innerHTML=d.checks.map(c=>`<div class="c">
+        <span class="chip ${c.status}">${c.status==="pass"?"✓ pass":c.status==="warn"?"⚠ warn":"✕ fail"}</span>
+        <span class="name">${esc(c.name)}</span><span class="detail">${esc(c.detail)}</span></div>`).join("");
+    }catch(e){$("#diag-checks").innerHTML=`<div class="empty">Checks failed to run: ${esc(e.message)}</div>`}
+  };
+  const loadLogs=async()=>{
+    try{
+      const logs=await j(`/api/logs?level=${level}&limit=300`);
+      const el=$("#loglines");if(!el)return;
+      const stick=el.scrollTop+el.clientHeight>=el.scrollHeight-8;
+      el.innerHTML=logs.map(l=>`<div class="${esc(l.level)}"><span class="t">${fmtClock(l.time)}</span> ${esc(l.level.padEnd(5))} ${esc(l.msg)}${l.attrs?"  <span class='t'>"+esc(l.attrs)+"</span>":""}</div>`).join("")||"No log lines at this level yet.";
+      if(stick)el.scrollTop=el.scrollHeight;
+    }catch(e){/* next tick retries */}
+  };
+  $("#diag-run").addEventListener("click",runChecks);
+  $$("[data-lvl]").forEach(b=>b.addEventListener("click",()=>{
+    level=b.dataset.lvl;$$("[data-lvl]").forEach(x=>x.classList.toggle("on",x===b));loadLogs();
+  }));
+  runChecks();loadLogs();
+  stopLogFollow();logTimer=setInterval(loadLogs,3000);
+};
+
+/* ── config ─────────────────────────────────────────────────────────── */
+views.config=function(){
+  const h=S.health||{},c=S.config||{},full=S.cfgFull||{},cfg=full.config||{};
+  const menu=cfg.menu||{},sec=cfg.security||{},al=cfg.alerts||{},spike=al.failure_spike||{},net=cfg.network||{};
+  $("#view").innerHTML=`
+    <div class="eyebrow">File</div>
+    <div class="panel pad">
+      <dl class="kv" style="margin-bottom:.6rem">
+        <dt>Config file</dt><dd class="mono">${esc(c.path||"–")}</dd>
         <dt>Status</dt><dd>${c.rejected?'<span class="chip failed">✕ rejected — serving last good</span>':'<span class="chip ready">✓ valid and serving</span>'}</dd>
-        <dt>Sign-in</dt><dd>${h.auth_configured?'<span class="chip ready">✓ password / token set</span>':'<span class="chip stalled">⚠ open access — set a password or restrict dashboard_bind</span>'}</dd>
       </dl>
-      <button class="btn primary" id="reload">Reload config file</button>
-      <span class="dim" style="font-size:.78rem;margin-left:.8rem">Edits are picked up automatically; use this to re-check right now.</span>
+      <div class="actions" style="margin-top:0">
+        <button class="btn" id="reload">Reload config file</button>
+        <button class="btn" id="raw-edit">Edit raw YAML</button>
+      </div>
     </div>
-    <div class="eyebrow">Connecting clients — what your network needs to know</div>
-    <div class="panel" style="padding:1rem 1.2rem">
-      <dl class="kv">
-        <dt>This server</dt><dd class="mono">${esc(h.advertise_ip||"–")}</dd>
-        <dt>DHCP mode</dt><dd class="mono">${esc(h.dhcp_mode||"–")}</dd>
-        <dt>Boot URL</dt><dd class="mono">${esc(h.http_base||"")}/boot.ipxe</dd>
+
+    <div class="eyebrow">Boot menu &amp; policy</div>
+    <div class="panel pad">
+      <div class="formrow">
+        <div class="field"><label for="c-title">Menu title</label><input type="text" id="c-title" value="${esc(menu.title||"")}"></div>
+        <div class="field"><label for="c-timeout">Menu timeout (seconds before booting from local disk)</label>
+          <input type="number" id="c-timeout" min="5" max="600" value="${menu.timeout_seconds||30}"></div>
+      </div>
+      <label class="check" style="margin-bottom:.9rem"><input type="checkbox" id="c-lockdown" ${sec.allow_unknown_macs===false?"checked":""}>
+        Lockdown — machines matching no Targeting rule get no boot service</label>
+      <div class="field"><label for="c-webhook">Alert webhook URL <span class="faint">(receives JSON for every alert; empty = log only)</span></label>
+        <input type="text" id="c-webhook" value="${esc(al.webhook_url||"")}" placeholder="https://…"></div>
+      <div class="formrow">
+        <div class="field"><label for="c-spikepc">Failure-spike threshold (%)</label><input type="number" id="c-spikepc" min="1" max="100" value="${spike.threshold_percent||20}"></div>
+        <div class="field"><label for="c-spikemin">…but only after this many boots in the window</label><input type="number" id="c-spikemin" min="1" value="${spike.min_sessions||10}"></div>
+      </div>
+      <div class="actions"><button class="btn primary" id="c-save">Save settings</button></div>
+    </div>
+
+    <div class="eyebrow">Sign-in &amp; API access</div>
+    <div class="panel pad">
+      <dl class="kv" style="margin-bottom:.6rem">
+        <dt>Console sign-in</dt><dd>${full.has_password?'<span class="chip ready">✓ password set (user: admin)</span>':'<span class="chip stalled">⚠ open access</span>'}</dd>
+        <dt>API tokens</dt><dd id="tok-count">${full.token_count||0} active</dd>
       </dl>
-      <p class="dim" style="font-size:.82rem;margin-bottom:.6rem">
-        In <b>proxy</b> mode there is nothing to configure — clients on this network find Emberboot automatically.
-        On relayed VLANs, or in <b>options66-67</b> mode, set these on your DHCP server:</p>
-      <pre class="code">Option 66 (TFTP server) : ${esc(h.advertise_ip||"&lt;server-ip&gt;")}
-Option 67 (boot file)   : ${bios}   ← BIOS clients
-                          ${uefi}   ← UEFI x64 clients</pre>
-      <div class="copyrow"><button class="btn" id="copy-dhcp">Copy DHCP values</button></div>
+      <div class="formrow">
+        <div class="field"><label for="pw1">${full.has_password?"Change password":"Set a password"}</label><input type="password" id="pw1" autocomplete="new-password"></div>
+        <div class="field"><label for="pw2">Repeat password</label><input type="password" id="pw2" autocomplete="new-password"></div>
+      </div>
+      <div class="actions" style="margin-top:0;margin-bottom:1.1rem">
+        <button class="btn primary" id="pw-save">Save password</button>
+      </div>
+      <div id="tok-list" class="dim" style="font-size:.8rem;margin-bottom:.6rem">Loading tokens…</div>
+      <button class="btn" id="tok-new">Create API token</button>
     </div>
-    <div class="eyebrow">API</div>
-    <div class="panel" style="padding:1rem 1.2rem">
-      <p class="dim" style="font-size:.82rem;margin-bottom:.6rem">Everything on this page is available as JSON with a bearer token (<span class="mono">auth.api_tokens</span>):</p>
-      <pre class="code">GET /api/health      GET /api/images      GET /api/sessions?mac=…
-GET /api/activity    GET /api/alerts      GET /api/config
-POST /api/reload     GET /metrics         (Prometheus)</pre>
+
+    <div class="eyebrow">Network <span class="tag">applies after restart</span></div>
+    <div class="panel pad">
+      <div class="formrow">
+        <div class="field"><label for="n-mode">DHCP mode</label>
+          <select id="n-mode">
+            <option value="proxy" ${net.dhcp_mode!=="options66-67"?"selected":""}>proxy — coexist with the existing DHCP server</option>
+            <option value="options66-67" ${net.dhcp_mode==="options66-67"?"selected":""}>options66-67 — the DHCP server points clients here</option>
+          </select></div>
+        <div class="field"><label for="n-adv">Advertise IP <span class="faint">(empty = autodetect)</span></label>
+          <input type="text" id="n-adv" value="${esc(net.advertise_ip||"")}" placeholder="${esc(h.advertise_ip||"")}"></div>
+      </div>
+      <div class="actions" style="margin-top:0;margin-bottom:.9rem"><button class="btn" id="n-save">Save network settings</button></div>
+      <p class="dim" style="font-size:.82rem;margin-bottom:.5rem">For DHCP servers on relayed VLANs (or options66-67 mode), configure:</p>
+      <pre class="code">Option 66 (TFTP server) : ${esc(h.advertise_ip||"")}
+Option 67 (boot file)   : undionly.kpxe   ← BIOS clients
+                          snponly.efi     ← UEFI x64 clients</pre>
+      <div class="actions"><button class="btn" id="copy-dhcp">Copy DHCP values</button></div>
     </div>`;
   $("#reload").addEventListener("click",async()=>{
-    try{const r=await j("/api/reload",{method:"POST"});
-      r.ok?toast("Config reloaded"):toast("Config rejected — still serving last good. "+r.error,true);
-      refresh();
-    }catch(e){toast("Reload request failed: "+e.message,true)}
+    try{const r=await api.post("/api/reload");
+      r.ok?toast("Config reloaded"):toast("Config rejected — still serving last good. "+r.error,true);refresh()}
+    catch(e){toast("Reload failed: "+e.message,true)}
   });
-  $("#copy-dhcp").addEventListener("click",()=>copy(`option 66 = ${h.advertise_ip}\noption 67 = ${bios} (BIOS) / ${uefi} (UEFI x64)`,"DHCP values"));
+  $("#raw-edit").addEventListener("click",rawEditorDrawer);
+  $("#c-save").addEventListener("click",async()=>{
+    const ops=[
+      {path:["menu","title"],value:$("#c-title").value.trim()||"Emberboot Network Boot"},
+      {path:["menu","timeout_seconds"],value:+$("#c-timeout").value||30},
+      {path:["security","allow_unknown_macs"],value:!$("#c-lockdown").checked},
+      {path:["alerts","failure_spike","threshold_percent"],value:+$("#c-spikepc").value||20},
+      {path:["alerts","failure_spike","min_sessions"],value:+$("#c-spikemin").value||10},
+    ];
+    const wh=$("#c-webhook").value.trim();
+    ops.push(wh?{path:["alerts","webhook_url"],value:wh}:{path:["alerts","webhook_url"],delete:true});
+    try{await api.patch(ops);toast("Settings saved");await refresh();render()}
+    catch(e){toast("Not saved — "+e.message,true)}
+  });
+  $("#pw-save").addEventListener("click",async()=>{
+    const a=$("#pw1").value,b=$("#pw2").value;
+    if(a!==b){toast("Passwords do not match",true);return}
+    try{await api.post("/api/auth/password",{password:a});
+      toast("Password saved — the browser will ask you to sign in as admin");await refresh();render()}
+    catch(e){toast("Not saved — "+e.message,true)}
+  });
+  $("#n-save").addEventListener("click",async()=>{
+    const ops=[{path:["network","dhcp_mode"],value:$("#n-mode").value}];
+    const adv=$("#n-adv").value.trim();
+    ops.push(adv?{path:["network","advertise_ip"],value:adv}:{path:["network","advertise_ip"],delete:true});
+    try{await api.patch(ops);toast("Network settings saved — restart the service to apply")}
+    catch(e){toast("Not saved — "+e.message,true)}
+  });
+  $("#copy-dhcp").addEventListener("click",()=>copy(`option 66 = ${h.advertise_ip}\noption 67 = undionly.kpxe (BIOS) / snponly.efi (UEFI x64)`,"DHCP values"));
+  loadTokens();
+  $("#tok-new").addEventListener("click",async()=>{
+    try{const r=await api.post("/api/auth/tokens");
+      openDrawer("API token created",`
+        <p class="dim" style="font-size:.84rem;margin-bottom:.8rem">Copy it now — this is the only time the full token is shown. Use it as <span class="mono">Authorization: Bearer …</span></p>
+        <pre class="code">${esc(r.token)}</pre>
+        <div class="actions"><button class="btn primary" id="tok-copy">Copy token</button></div>`);
+      $("#tok-copy").addEventListener("click",()=>copy(r.token,"Token"));
+      loadTokens();refresh();}
+    catch(e){toast("Could not create token — "+e.message,true)}
+  });
+};
+async function loadTokens(){
+  const el=$("#tok-list");if(!el)return;
+  try{
+    const toks=await j("/api/auth/tokens");
+    el.innerHTML=toks.length?toks.map(t=>`<div style="display:flex;gap:.8rem;align-items:center;padding:.2rem 0">
+      <span class="mono">${esc(t.hint)}</span>
+      <button class="btn sm danger" data-tokdel="${t.index}">Revoke</button></div>`).join("")
+      :"No API tokens yet.";
+    $$("[data-tokdel]").forEach(b=>b.addEventListener("click",async()=>{
+      if(!confirm("Revoke this token? Anything using it loses access immediately."))return;
+      try{await api.del("/api/auth/tokens/"+b.dataset.tokdel);toast("Token revoked");loadTokens();refresh()}
+      catch(e){toast("Revoke failed — "+e.message,true)}
+    }));
+  }catch(e){el.textContent="Could not load tokens."}
 }
-views.config=config;
+async function rawEditorDrawer(){
+  let raw;try{raw=await j("/api/config/raw")}catch(e){toast("Could not load the file — "+e.message,true);return}
+  openDrawer("emberboot.yaml",`
+    <p class="dim" style="font-size:.8rem;margin-bottom:.6rem">The whole configuration, as it is on disk. Saving validates first — an invalid save changes nothing.</p>
+    <div class="field"><textarea id="raw-yaml" spellcheck="false" style="min-height:22rem">${esc(raw)}</textarea></div>
+    <div class="actions"><button class="btn primary" id="raw-save">Validate and save</button></div>
+    <pre class="code" id="raw-err" style="display:none;border-color:var(--bad)"></pre>`);
+  $("#raw-save").addEventListener("click",async()=>{
+    try{await api.put("/api/config/raw",{yaml:$("#raw-yaml").value});
+      toast("Config saved and reloaded");closeDrawer();refresh()}
+    catch(e){const el=$("#raw-err");el.style.display="block";el.textContent=e.message;toast("Rejected — nothing changed",true)}
+  });
+}
 
-/* ── drawers ────────────────────────────────────────────────────────── */
+/* ── drawer ─────────────────────────────────────────────────────────── */
 let lastFocus=null;
 function openDrawer(title,html){
   lastFocus=document.activeElement;
@@ -414,54 +822,7 @@ $("#drawer-x").addEventListener("click",closeDrawer);
 $("#scrim").addEventListener("click",closeDrawer);
 document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});
 
-function imageDrawer(i){
-  const p=i.plan||{};
-  const snippet=`images:\n  attach:\n    ${i.file_name}:\n      display_name: "${i.display_name}"\n      answer_file: ""        # file in answers/\n      disabled: ${i.disabled}\n      kernel_args: ""`;
-  openDrawer(i.display_name,`
-    <dl class="kv">
-      <dt>File</dt><dd class="mono">${esc(i.file_name)}</dd>
-      <dt>State</dt><dd><span class="chip ${esc(i.state)}">${esc(i.state)}</span></dd>
-      <dt>Strategy</dt><dd class="mono">${esc(i.strategy||"–")}</dd>
-      <dt>Family</dt><dd class="mono">${esc(p.family||"–")}</dd>
-      <dt>Size</dt><dd class="mono">${fmtSize(i.size_bytes)}</dd>
-      <dt>Answer file</dt><dd class="mono">${esc(i.answer_file||"none")}</dd>
-    </dl>
-    <div class="eyebrow" style="margin-top:0">Why this strategy</div>
-    <p class="dim" style="font-size:.82rem">${esc(i.reason)}</p>
-    ${p.kernel?`<div class="eyebrow">Boot plan</div>
-    <pre class="code">kernel  ${esc(p.kernel)}\n${(p.initrds||[]).map(x=>"initrd  "+esc(x)).join("\n")}\nargs    ${esc(p.args||"")}</pre>`:""}
-    ${p.files?`<div class="eyebrow">Boot plan (wimboot)</div>
-    <pre class="code">${esc(Object.entries(p.files).map(([k,v])=>k.padEnd(10)+v).join("\n"))}</pre>`:""}
-    <div class="eyebrow">Config snippet</div>
-    <p class="dim" style="font-size:.78rem">Paste into emberboot.yaml to customize this image:</p>
-    <pre class="code">${esc(snippet)}</pre>
-    <div class="copyrow"><button class="btn" id="copy-snip">Copy snippet</button></div>`);
-  $("#copy-snip").addEventListener("click",()=>copy(snippet,"Config snippet"));
-}
-
-async function sessionDrawer(id){
-  let s;try{s=await j("/api/sessions/"+id)}catch(e){toast("Could not load session "+id,true);return}
-  const evs=s.events||[];
-  const t0=evs.length?+new Date(evs[0].at):0;
-  openDrawer(`${s.mac}`,`
-    <dl class="kv">
-      <dt>Result</dt><dd>${resultChip(s.result)}</dd>
-      <dt>Started</dt><dd>${fmtT(s.started_at)}</dd>
-      <dt>IP</dt><dd class="mono">${esc(s.ip||"–")}</dd>
-      <dt>Firmware</dt><dd class="mono">${esc(s.firmware||"–")}</dd>
-      <dt>Image</dt><dd class="mono">${esc(s.image||"–")}</dd>
-      <dt>Strategy</dt><dd class="mono">${esc(s.strategy||"–")}</dd>
-    </dl>
-    <div class="eyebrow" style="margin-top:0">Timeline</div>
-    <div class="tl">${evs.map(e=>{
-      const dt=((+new Date(e.at)-t0)/1000);
-      const term=e.stage==="complete"?"term-ok":e.stage==="fail"?"term-bad":"";
-      return `<div class="e ${term}"><span class="stage">${esc(e.stage)}</span>${esc(e.detail)}
-        <div class="meta">${fmtClock(e.at)} · +${dt<60?dt.toFixed(1)+"s":Math.floor(dt/60)+"m "+Math.round(dt%60)+"s"}</div></div>`;
-    }).join("")||'<div class="dim">No events recorded for this session.</div>'}</div>`);
-}
-
-/* ── activity chart: hourly stacked bars by result (status colors) ──── */
+/* ── activity chart ─────────────────────────────────────────────────── */
 function drawChart(host,buckets){
   if(!host)return;
   const total=buckets.reduce((a,b)=>a+b.completed+b.failed+b.stalled,0);
@@ -471,8 +832,8 @@ function drawChart(host,buckets){
   const max=Math.max(...buckets.map(b=>b.completed+b.failed+b.stalled));
   const yMax=Math.max(2,Math.ceil(max/2)*2);
   const y=v=>H-padB-(v/yMax)*(H-padB-8);
-  // SVG presentation attributes cannot resolve CSS var(); colors go through
-  // style attributes instead.
+  // Status palette (validated on this surface); SVG presentation attributes
+  // cannot resolve CSS var(), so literal hexes are used.
   const C={completed:"#0ca30c",stalled:"#fab219",failed:"#d03b3b"};
   let svg=`<svg width="${W}" height="${H}" role="img" aria-label="Boots per hour by result, last 24 hours">`;
   [0,yMax/2,yMax].forEach(v=>{svg+=`<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--hairline)" stroke-width="1"/>
@@ -482,8 +843,7 @@ function drawChart(host,buckets){
     const parts=[["completed",b.completed],["stalled",b.stalled],["failed",b.failed]].filter(p=>p[1]>0);
     parts.forEach(([k,v],pi)=>{
       const y1=y(cur+v),h=Math.max(1,y(cur)-y(cur+v)-(pi<parts.length-1?2:0));
-      const top=pi===parts.length-1;
-      svg+=`<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="${C[k]}" ${top?'rx="2"':""}/>`;
+      svg+=`<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="${C[k]}" ${pi===parts.length-1?'rx="2"':""}/>`;
       cur+=v;
     });
     const hr=new Date(b.hour).getHours();
@@ -497,12 +857,12 @@ function drawChart(host,buckets){
     r.addEventListener("mouseenter",()=>{
       const b=buckets[+r.dataset.b],hr=new Date(b.hour);
       tip.innerHTML=`<div class="h">${String(hr.getHours()).padStart(2,"0")}:00–${String((hr.getHours()+1)%24).padStart(2,"0")}:00</div>
-        <div class="r"><span><b style="color:var(--ok)">✓</b> Completed</span><b>${b.completed}</b></div>
-        <div class="r"><span><b style="color:var(--warn)">⚠</b> Stalled</span><b>${b.stalled}</b></div>
-        <div class="r"><span><b style="color:var(--bad)">✕</b> Failed</span><b>${b.failed}</b></div>`;
+        <div class="r"><span><b style="color:#0ca30c">✓</b> Completed</span><b>${b.completed}</b></div>
+        <div class="r"><span><b style="color:#fab219">⚠</b> Stalled</span><b>${b.stalled}</b></div>
+        <div class="r"><span><b style="color:#d03b3b">✕</b> Failed</span><b>${b.failed}</b></div>`;
       tip.style.display="block";
-      const x=Math.min(+r.getAttribute("x")+10,host.clientWidth-160);
-      tip.style.left=x+"px";tip.style.top="6px";
+      tip.style.left=Math.min(+r.getAttribute("x")+10,host.clientWidth-170)+"px";
+      tip.style.top="6px";
     });
     r.addEventListener("mouseleave",()=>tip.style.display="none");
   });

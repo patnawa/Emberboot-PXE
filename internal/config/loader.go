@@ -52,6 +52,9 @@ type Manager struct {
 	path string
 	log  *slog.Logger
 
+	// writeMu serializes file writes from the management API (ADR-0004).
+	writeMu sync.Mutex
+
 	mu       sync.RWMutex
 	current  *Config
 	status   Status

@@ -15,6 +15,7 @@ import (
 	"emberboot/internal/alerts"
 	"emberboot/internal/config"
 	"emberboot/internal/images"
+	"emberboot/internal/logging"
 	"emberboot/internal/metrics"
 	"emberboot/internal/sessions"
 )
@@ -36,6 +37,10 @@ type APIDeps struct {
 	// the Config view can show admins the exact DHCP 66/67 values to use.
 	AdvertiseIP string
 	HTTPBase    string
+	// LogRing exposes recent log records to the diagnostics view (optional).
+	LogRing *logging.Ring
+	// RogueActive reports whether rogue-PXE monitoring is running (optional).
+	RogueActive func() bool
 }
 
 // APIServer is the authenticated management server (read-mostly dashboard +
@@ -60,6 +65,7 @@ func NewAPI(d APIDeps, addr string) *APIServer {
 	mux.HandleFunc("GET /api/alerts", s.auth(s.handleAlerts))
 	mux.HandleFunc("GET /api/config", s.auth(s.handleConfig))
 	mux.HandleFunc("POST /api/reload", s.auth(s.handleReload))
+	s.registerManagement(mux)
 	mux.Handle("GET /metrics", s.authHandler(d.Metrics.Handler()))
 	s.srv = &http.Server{
 		Addr:              addr,

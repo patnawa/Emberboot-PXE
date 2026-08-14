@@ -135,6 +135,12 @@ func (s *Store) OnFinish(f func(result string)) { s.onFinish = f }
 // Close closes the database.
 func (s *Store) Close() error { return s.db.Close() }
 
+// Ping verifies the database is readable (diagnostics).
+func (s *Store) Ping() error {
+	var v int
+	return s.db.QueryRow(`SELECT COUNT(*) FROM sessions LIMIT 1`).Scan(&v)
+}
+
 // ActiveCount reports in-progress sessions (for the gauge).
 func (s *Store) ActiveCount() int {
 	s.mu.Lock()

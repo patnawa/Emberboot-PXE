@@ -48,7 +48,7 @@ type Image struct {
 	// AnswerFile from config images.attach[..].answer_file ("" = none).
 	AnswerFile string `json:"answer_file,omitempty"`
 	// ExtraKernelArgs from config images.attach[..].kernel_args.
-	ExtraKernelArgs string `json:"-"`
+	ExtraKernelArgs string `json:"extra_kernel_args,omitempty"`
 }
 
 // quiesce is how long a file must stop changing before validation is tried —
@@ -411,3 +411,6 @@ func (m *Manager) diskJanitor(ctx context.Context, dir string) {
 func isISOName(name string) bool {
 	return strings.EqualFold(filepath.Ext(name), ".iso")
 }
+
+// DiskFreeGB reports free space on the volume holding dir (diagnostics).
+func DiskFreeGB(dir string) (float64, error) { return diskFreeGB(dir) }
