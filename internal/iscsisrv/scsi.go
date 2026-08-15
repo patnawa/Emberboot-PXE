@@ -32,9 +32,11 @@ type lun struct {
 
 // scsiResult is the outcome of one CDB.
 type scsiResult struct {
-	data   []byte
-	status byte
-	sense  []byte
+	data       []byte
+	readOffset int64
+	readLength int
+	status     byte
+	sense      []byte
 }
 
 func good(data []byte) scsiResult { return scsiResult{data: data, status: statusGood} }
@@ -147,11 +149,14 @@ func (l *lun) read(lba uint64, count uint32) scsiResult {
 	if byteLen > maxReadBytes {
 		return check(senseIllegalRequest, ascInvalidFieldCDB, 0)
 	}
-	buf := make([]byte, byteLen)
-	if _, err := l.ra.ReadAt(buf, int64(lba)*cdBlockSize); err != nil && err != io.EOF {
-		return check(0x03 /* MEDIUM ERROR */, 0x11, 0)
+	// Defer the actual ReaderAt calls to the protocol layer, which streams
+	// negotiated Data-In chunks. This keeps memory bounded per connection
+	// instead of allocating up to maxReadBytes for every concurrent client.
+	return scsiResult{
+		readOffset: int64(lba) * cdBlockSize,
+		readLength: int(byteLen),
+		status:     statusGood,
 	}
-	return good(buf)
 }
 
 // mmPage2A is the MM capabilities mode page: every read bit set, every

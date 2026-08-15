@@ -59,7 +59,7 @@ tr.row:hover td{background:var(--raised)}
 .dim{color:var(--ink-2)}
 .faint{color:var(--ink-3)}
 .chip{display:inline-flex;align-items:center;gap:.35rem;padding:.06rem .55rem;border-radius:99px;font-size:.72rem;font-weight:600;white-space:nowrap}
-.chip.ready,.chip.completed,.chip.pass{background:rgba(12,163,12,.13);color:#4cc44c}
+.chip.ready,.chip.handoff,.chip.pass{background:rgba(12,163,12,.13);color:#4cc44c}
 .chip.validating,.chip.active,.chip.stalled,.chip.warn{background:rgba(250,178,25,.12);color:var(--warn)}
 .chip.invalid,.chip.failed,.chip.fail{background:rgba(208,59,59,.15);color:#e46a6a}
 .chip.plain{background:var(--raised);color:var(--ink-2)}
@@ -302,11 +302,11 @@ function fuse(sess){
     if(i>0)html+=`<s class="${lit?"lit":""}"></s>`;
     html+=`<i class="${lit?"lit":""}"></i>`;
   });
-  const cls=sess.result==="completed"?"end ok":sess.result?"end "+(sess.result==="stalled"?"warn":"bad"):"";
+  const cls=sess.result==="handoff"?"end ok":sess.result?"end "+(sess.result==="stalled"?"warn":"bad"):"";
   html+=`<s class="${sess.result?"lit":""}"></s><i class="${cls}"></i></span>`;
   return html;
 }
-function resultChip(r){return r?`<span class="chip ${esc(r)}">${r==="completed"?"✓ ":r==="stalled"?"⚠ ":"✕ "}${esc(r)}</span>`
+function resultChip(r){return r?`<span class="chip ${esc(r)}">${r==="handoff"?"✓ ":r==="stalled"?"⚠ ":"✕ "}${r==="handoff"?"payload handed off":esc(r)}</span>`
                               :'<span class="chip active">● in progress</span>'}
 
 /* ── overview ───────────────────────────────────────────────────────── */
@@ -316,7 +316,7 @@ views.overview=function(){
   $("#view").innerHTML=`
     <div class="cards">
       <div class="card"><div class="v">${S.connected?"Serving":"Down"}</div><div class="k">Boot service</div></div>
-      <div class="card"><div class="v">${ready}<span class="faint"> / ${S.images.length}</span></div><div class="k">Images ready</div></div>
+      <div class="card"><div class="v">${ready}<span class="faint"> / ${S.images.length}</span></div><div class="k">Images validated</div></div>
       <div class="card"><div class="v">${h.active_sessions??"–"}</div><div class="k">Machines booting now</div></div>
       <div class="card"><div class="v">${al24}</div><div class="k">Alerts, last 24 h</div></div>
     </div>
@@ -324,7 +324,7 @@ views.overview=function(){
     <div class="panel">
       <div class="chartwrap" id="chart"></div>
       <div class="legend">
-        <span><b style="background:var(--ok)"></b>✓ Completed</span>
+        <span><b style="background:var(--ok)"></b>✓ Payload handed off</span>
         <span><b style="background:var(--warn)"></b>⚠ Stalled</span>
         <span><b style="background:var(--bad)"></b>✕ Failed</span>
       </div>
@@ -340,7 +340,7 @@ views.images=function(){
   const rows=S.images.map((i,n)=>`<tr class="row" data-img="${n}" tabindex="0">
     <td><div>${esc(i.display_name)}${i.disabled?' <span class="faint">(hidden from menu)</span>':""}</div>
         <div class="mono faint">${esc(i.file_name)}</div></td>
-    <td><span class="chip ${esc(i.state)}">${esc(i.state)}</span></td>
+    <td><span class="chip ${esc(i.state)}">${i.state==="ready"?"validated":esc(i.state)}</span></td>
     <td class="mono">${esc(i.strategy||"–")}</td>
     <td class="mono">${esc(i.plan?.family||"–")}</td>
     <td class="mono">${esc(i.answer_file||"–")}</td>
@@ -363,16 +363,17 @@ function imageDrawer(i){
   openDrawer(i.display_name,`
     <dl class="kv">
       <dt>File</dt><dd class="mono">${esc(i.file_name)}</dd>
-      <dt>State</dt><dd><span class="chip ${esc(i.state)}">${esc(i.state)}</span></dd>
+      <dt>State</dt><dd><span class="chip ${esc(i.state)}">${i.state==="ready"?"validated":esc(i.state)}</span></dd>
       <dt>Strategy</dt><dd class="mono">${esc(i.strategy||"–")} <span class="faint">(${esc(p.family||"–")})</span></dd>
       <dt>Size</dt><dd class="mono">${fmtSize(i.size_bytes)}</dd>
     </dl>
+    ${i.sha256?`<div class="eyebrow">Validated SHA-256</div><pre class="code">${esc(i.sha256)}</pre>`:""}
     <div class="eyebrow" style="margin-top:0">Why this strategy</div>
     <p class="dim" style="font-size:.82rem;margin-bottom:1rem">${esc(i.reason)}</p>
     ${p.kernel?`<pre class="code">kernel  ${esc(p.kernel)}\n${(p.initrds||[]).map(x=>"initrd  "+esc(x)).join("\n")}\nargs    ${esc(p.args||"")}</pre>`:""}
     ${p.files?`<pre class="code">${esc(Object.entries(p.files).map(([k,v])=>k.padEnd(10)+v).join("\n"))}</pre>`:""}
     ${i.iscsi_target&&i.state==="ready"?`<div class="eyebrow">Virtual CD over iSCSI</div>
-    <p class="dim" style="font-size:.8rem;margin-bottom:.5rem">Every ready image is also served as a read-only iSCSI CD — usable from any initiator, or as this image's boot method by setting the strategy below to <span class="mono">iscsi</span> (a proven low-RAM path for Windows installs).</p>
+    <p class="dim" style="font-size:.8rem;margin-bottom:.5rem">This image can be exposed as a read-only iSCSI CD after its client subnet is added to <span class="mono">security.iscsi_allowed_subnets</span>. The source ACL and network firewall are required because the embedded target does not use CHAP.</p>
     <pre class="code">IQN      ${esc(i.iscsi_target)}\nPortal   ${esc(S.health?.advertise_ip||"")}:${S.health?.iscsi_port||3260}\nsanboot  ${esc(sanbootURI(i))}</pre>
     <div class="copyrow"><button class="btn sm" id="copy-iscsi">Copy sanboot URI</button></div>`:""}
     <div class="eyebrow">Settings</div>
@@ -419,13 +420,13 @@ views.sessions=function(){
   const q=S.q.toLowerCase();
   let list=S.sessions.filter(s=>!q||s.mac.includes(q)||s.ip.includes(q)||(s.image||"").toLowerCase().includes(q));
   if(S.filter==="active")list=list.filter(s=>!s.result);
-  if(S.filter==="completed")list=list.filter(s=>s.result==="completed");
+  if(S.filter==="handoff")list=list.filter(s=>s.result==="handoff");
   if(S.filter==="failed")list=list.filter(s=>s.result==="failed"||s.result==="stalled");
   $("#view").innerHTML=`
     <div class="toolbar">
       <input class="search" id="q" placeholder="Search MAC, IP, or image" value="${esc(S.q)}" aria-label="Search sessions">
       <div class="seg" role="group" aria-label="Filter by result">
-        ${["all","active","completed","failed"].map(f=>`<button data-f="${f}" class="${S.filter===f?"on":""}">${f[0].toUpperCase()+f.slice(1)}</button>`).join("")}
+        ${["all","active","handoff","failed"].map(f=>`<button data-f="${f}" class="${S.filter===f?"on":""}">${f[0].toUpperCase()+f.slice(1)}</button>`).join("")}
       </div>
       <span class="dim" style="font-size:.78rem">${list.length} of ${S.sessions.length}</span>
     </div>
@@ -482,7 +483,7 @@ async function sessionDrawer(id){
     <div class="eyebrow" style="margin-top:0">Timeline</div>
     <div class="tl">${evs.map(e=>{
       const dt=((+new Date(e.at)-t0)/1000);
-      const term=e.stage==="complete"?"term-ok":e.stage==="fail"?"term-bad":"";
+      const term=e.stage==="handoff"?"term-ok":e.stage==="fail"?"term-bad":"";
       return `<div class="e ${term}"><span class="stage">${esc(e.stage)}</span>${esc(e.detail)}
         <div class="meta">${fmtClock(e.at)} · +${dt<60?dt.toFixed(1)+"s":Math.floor(dt/60)+"m "+Math.round(dt%60)+"s"}</div></div>`;
     }).join("")||'<div class="dim">No events recorded for this session.</div>'}</div>`);
@@ -707,18 +708,18 @@ views.config=function(){
     <div class="eyebrow">Sign-in &amp; API access</div>
     <div class="panel pad">
       <dl class="kv" style="margin-bottom:.6rem">
-        <dt>Console sign-in</dt><dd>${full.has_password?'<span class="chip ready">✓ password set (user: admin)</span>':'<span class="chip stalled">⚠ open access</span>'}</dd>
+        <dt>Console sign-in</dt><dd>${full.has_password?'<span class="chip ready">✓ password set (user: admin)</span>':'<span class="chip stalled">⚠ local bootstrap only</span>'}</dd>
         <dt>API tokens</dt><dd id="tok-count">${full.token_count||0} active</dd>
       </dl>
       <div class="formrow">
-        <div class="field"><label for="pw1">${full.has_password?"Change password":"Set a password"}</label><input type="password" id="pw1" autocomplete="new-password"></div>
+        <div class="field"><label for="pw1">${full.has_password?"Change password":"Set a password"}</label><input type="password" id="pw1" minlength="12" maxlength="72" autocomplete="new-password"><div class="hint">12–72 UTF-8 bytes. Configure dashboard TLS before allowing remote access.</div></div>
         <div class="field"><label for="pw2">Repeat password</label><input type="password" id="pw2" autocomplete="new-password"></div>
       </div>
       <div class="actions" style="margin-top:0;margin-bottom:1.1rem">
         <button class="btn primary" id="pw-save">Save password</button>
       </div>
       <div id="tok-list" class="dim" style="font-size:.8rem;margin-bottom:.6rem">Loading tokens…</div>
-      <button class="btn" id="tok-new">Create API token</button>
+      <button class="btn" id="tok-new" ${full.has_password?"":"disabled"}>Create API token</button>
     </div>
 
     <div class="eyebrow">Network <span class="tag">applies after restart</span></div>
@@ -734,7 +735,7 @@ views.config=function(){
       </div>
       <div class="actions" style="margin-top:0;margin-bottom:.9rem"><button class="btn" id="n-save">Save network settings</button></div>
       <dl class="kv" style="margin-bottom:.6rem">
-        <dt>iSCSI portal</dt><dd class="mono">${esc(h.advertise_ip||"–")}:${h.iscsi_port||3260} <span class="faint">— every ready image doubles as a virtual CD; the IQN and sanboot URI are in each image's detail drawer</span></dd>
+        <dt>iSCSI portal</dt><dd class="mono">${esc(h.advertise_ip||"–")}:${h.iscsi_port||3260} <span class="faint">— deny-all unless security.iscsi_allowed_subnets explicitly permits the client</span></dd>
       </dl>
       <p class="dim" style="font-size:.82rem;margin-bottom:.5rem">For DHCP servers on relayed VLANs (or options66-67 mode), configure:</p>
       <pre class="code">Option 66 (TFTP server) : ${esc(h.advertise_ip||"")}
@@ -764,6 +765,8 @@ Option 67 (boot file)   : undionly.kpxe   ← BIOS clients
   $("#pw-save").addEventListener("click",async()=>{
     const a=$("#pw1").value,b=$("#pw2").value;
     if(a!==b){toast("Passwords do not match",true);return}
+    if(new TextEncoder().encode(a).length<12){toast("Password must be at least 12 UTF-8 bytes",true);return}
+    if(new TextEncoder().encode(a).length>72){toast("Password must be at most 72 UTF-8 bytes",true);return}
     try{await api.post("/api/auth/password",{password:a});
       toast("Password saved — the browser will ask you to sign in as admin");await refresh();render()}
     catch(e){toast("Not saved — "+e.message,true)}
@@ -837,22 +840,22 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape")closeDrawer()});
 /* ── activity chart ─────────────────────────────────────────────────── */
 function drawChart(host,buckets){
   if(!host)return;
-  const total=buckets.reduce((a,b)=>a+b.completed+b.failed+b.stalled,0);
+  const total=buckets.reduce((a,b)=>a+b.handoff+b.failed+b.stalled,0);
   if(!total){host.innerHTML=`<div class="empty" style="padding:1.6rem"><b>No boots in the last 24 hours.</b><br>Hourly results land here as machines start booting.</div>`;return}
   const W=host.clientWidth-20||600,H=150,padL=30,padB=18;
   const n=buckets.length,slot=(W-padL)/n,bw=Math.max(4,Math.min(18,Math.floor(slot)-2));
-  const max=Math.max(...buckets.map(b=>b.completed+b.failed+b.stalled));
+  const max=Math.max(...buckets.map(b=>b.handoff+b.failed+b.stalled));
   const yMax=Math.max(2,Math.ceil(max/2)*2);
   const y=v=>H-padB-(v/yMax)*(H-padB-8);
   // Status palette (validated on this surface); SVG presentation attributes
   // cannot resolve CSS var(), so literal hexes are used.
-  const C={completed:"#0ca30c",stalled:"#fab219",failed:"#d03b3b"};
+  const C={handoff:"#0ca30c",stalled:"#fab219",failed:"#d03b3b"};
   let svg=`<svg width="${W}" height="${H}" role="img" aria-label="Boots per hour by result, last 24 hours">`;
   [0,yMax/2,yMax].forEach(v=>{svg+=`<line x1="${padL}" x2="${W}" y1="${y(v)}" y2="${y(v)}" style="stroke:var(--hairline)" stroke-width="1"/>
     <text x="${padL-6}" y="${y(v)+3}" text-anchor="end" font-size="9" style="fill:var(--ink-3);font-family:var(--mono);font-variant-numeric:tabular-nums">${v}</text>`});
   buckets.forEach((b,i)=>{
     const x=padL+i*slot+(slot-bw)/2;let cur=0;
-    const parts=[["completed",b.completed],["stalled",b.stalled],["failed",b.failed]].filter(p=>p[1]>0);
+    const parts=[["handoff",b.handoff],["stalled",b.stalled],["failed",b.failed]].filter(p=>p[1]>0);
     parts.forEach(([k,v],pi)=>{
       const y1=y(cur+v),h=Math.max(1,y(cur)-y(cur+v)-(pi<parts.length-1?2:0));
       svg+=`<rect x="${x}" y="${y1}" width="${bw}" height="${h}" fill="${C[k]}" ${pi===parts.length-1?'rx="2"':""}/>`;
@@ -869,7 +872,7 @@ function drawChart(host,buckets){
     r.addEventListener("mouseenter",()=>{
       const b=buckets[+r.dataset.b],hr=new Date(b.hour);
       tip.innerHTML=`<div class="h">${String(hr.getHours()).padStart(2,"0")}:00–${String((hr.getHours()+1)%24).padStart(2,"0")}:00</div>
-        <div class="r"><span><b style="color:#0ca30c">✓</b> Completed</span><b>${b.completed}</b></div>
+        <div class="r"><span><b style="color:#0ca30c">✓</b> Payload handed off</span><b>${b.handoff}</b></div>
         <div class="r"><span><b style="color:#fab219">⚠</b> Stalled</span><b>${b.stalled}</b></div>
         <div class="r"><span><b style="color:#d03b3b">✕</b> Failed</span><b>${b.failed}</b></div>`;
       tip.style.display="block";

@@ -17,12 +17,12 @@ import (
 
 // iSCSI opcodes (initiator → target).
 const (
-	opNopOut       = 0x00
-	opSCSICommand  = 0x01
-	opLoginReq     = 0x03
-	opTextReq      = 0x04
-	opSCSIDataOut  = 0x05
-	opLogoutReq    = 0x06
+	opNopOut      = 0x00
+	opSCSICommand = 0x01
+	opLoginReq    = 0x03
+	opTextReq     = 0x04
+	opSCSIDataOut = 0x05
+	opLogoutReq   = 0x06
 )
 
 // iSCSI opcodes (target → initiator).
@@ -39,17 +39,22 @@ const (
 // bhsLen is the fixed Basic Header Segment size.
 const bhsLen = 48
 
+const (
+	maxLoginTextData = 64 << 10
+	maxNopData       = 64 << 10
+)
+
 // pdu is one received PDU: the 48-byte header plus its data segment.
 type pdu struct {
 	hdr  [bhsLen]byte
 	data []byte
 }
 
-func (p *pdu) opcode() byte { return p.hdr[0] & 0x3f }
+func (p *pdu) opcode() byte    { return p.hdr[0] & 0x3f }
 func (p *pdu) immediate() bool { return p.hdr[0]&0x40 != 0 }
-func (p *pdu) flags() byte  { return p.hdr[1] }
-func (p *pdu) itt() uint32  { return binary.BigEndian.Uint32(p.hdr[16:20]) }
-func (p *pdu) cmdSN() uint32 { return binary.BigEndian.Uint32(p.hdr[24:28]) }
+func (p *pdu) flags() byte     { return p.hdr[1] }
+func (p *pdu) itt() uint32     { return binary.BigEndian.Uint32(p.hdr[16:20]) }
+func (p *pdu) cmdSN() uint32   { return binary.BigEndian.Uint32(p.hdr[24:28]) }
 
 // readPDU reads one PDU. maxData bounds the data segment (defensive).
 func readPDU(r io.Reader, maxData int) (*pdu, error) {
@@ -59,8 +64,9 @@ func readPDU(r io.Reader, maxData int) (*pdu, error) {
 	}
 	ahsLen := int(p.hdr[4]) * 4
 	dataLen := int(binary.BigEndian.Uint32(p.hdr[4:8]) & 0x00ffffff)
-	if dataLen > maxData {
-		return nil, fmt.Errorf("data segment %d exceeds limit %d", dataLen, maxData)
+	opLimit := opcodeDataLimit(p.opcode(), maxData)
+	if dataLen > opLimit {
+		return nil, fmt.Errorf("opcode %#x data segment %d exceeds limit %d", p.opcode(), dataLen, opLimit)
 	}
 	// Additional header segments are not used by any command we accept, but
 	// must be consumed to stay in sync.
@@ -82,6 +88,30 @@ func readPDU(r io.Reader, maxData int) (*pdu, error) {
 		}
 	}
 	return &p, nil
+}
+
+func opcodeDataLimit(opcode byte, ceiling int) int {
+	limit := 0
+	switch opcode {
+	case opLoginReq, opLoginResp, opTextReq, opTextResp:
+		limit = maxLoginTextData
+	case opNopOut, opNopIn:
+		limit = maxNopData
+	case opSCSIDataIn:
+		limit = ourMaxDSL
+	case opSCSIResponse:
+		limit = maxLoginTextData // sense data is small; keep a defensive ceiling.
+	case opReject:
+		limit = bhsLen
+	case opSCSICommand, opSCSIDataOut, opLogoutReq, opLogoutResp:
+		limit = 0
+	default:
+		limit = 0
+	}
+	if ceiling >= 0 && limit > ceiling {
+		return ceiling
+	}
+	return limit
 }
 
 // writePDU sends a PDU: hdr must be 48 bytes with DataSegmentLength unset;

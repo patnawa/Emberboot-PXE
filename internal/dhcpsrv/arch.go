@@ -13,14 +13,14 @@ import (
 type Firmware int
 
 const (
-	FirmwareUnknown Firmware = iota
-	FirmwareBIOS             // arch 0
-	FirmwareUEFI32           // arch 6
-	FirmwareUEFI64           // arch 7, 9
-	FirmwareARM64            // arch 11 (out of scope; identified for logging)
-	FirmwareHTTP64           // arch 16 (native UEFI HTTP Boot, x64)
-	FirmwareHTTP32           // arch 15
-	FirmwareHTTPARM64        // arch 19
+	FirmwareUnknown   Firmware = iota
+	FirmwareBIOS               // arch 0
+	FirmwareUEFI32             // arch 6
+	FirmwareUEFI64             // arch 7, 9
+	FirmwareARM64              // arch 11 (out of scope; identified for logging)
+	FirmwareHTTP64             // arch 16 (native UEFI HTTP Boot, x64)
+	FirmwareHTTP32             // arch 15
+	FirmwareHTTPARM64          // arch 19
 )
 
 func (f Firmware) String() string {

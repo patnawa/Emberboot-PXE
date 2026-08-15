@@ -1,28 +1,48 @@
 [Unit]
 Description=Emberboot PXE boot server
-Documentation=https://github.com/tsm-thailand/emberboot
+Documentation=https://github.com/patnawa/Emberboot-PXE
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=30
+StartLimitBurst=5
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/emberbootd -config /etc/emberboot/emberboot.yaml
+# The config is intentionally in StateDirectory: the management UI edits the
+# YAML source of truth and must be able to replace it atomically. On first
+# start Emberboot creates a loopback-only starter config here.
+ExecStart=/usr/local/bin/emberbootd -config /var/lib/emberboot/emberboot.yaml
 WorkingDirectory=/var/lib/emberboot
 # Crash-only design: always restart, fast. The crash marker fires the
 # crash-restart webhook alert on the next start.
-Restart=always
-RestartSec=1
-# UDP 67/69 without running as root.
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5min
+# UDP 67/69 and interface-pinned packet handling without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE CAP_NET_RAW
 NoNewPrivileges=true
 DynamicUser=true
 StateDirectory=emberboot
-ConfigurationDirectory=emberboot
-ReadWritePaths=/var/lib/emberboot
+StateDirectoryMode=0700
+UMask=0077
+LimitNOFILE=8192
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target

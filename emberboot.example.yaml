@@ -1,6 +1,8 @@
 # Emberboot configuration — this file plus the images folder is the entire source
 # of truth. It hot-reloads: invalid edits are rejected (alerted, shown in the
-# dashboard) while the last valid config keeps serving.
+# dashboard) while the last valid config keeps serving. For large ISOs, copy
+# to a non-.iso temporary name, verify the publisher's digest, then rename it
+# to .iso; Ready records a local SHA-256 but does not authenticate the publisher.
 
 site: bkk-hq
 
@@ -13,11 +15,25 @@ network:
   advertise_ip: ""
   tftp_port: 69
   http_port: 8090
+  # Admission limits protect the server from slow/stalled multi-GB transfers.
+  # Raise only after a production-equivalent capacity test and matching
+  # process/open-file limits. Per-IP prevents one Client consuming the pool.
+  http_max_streams: 600
+  http_max_streams_per_ip: 8
   # Embedded iSCSI target: serves ISOs that cannot netboot any other way
-  # (Debian installer, BSDs, unknown ISOs) as virtual CDs.
+  # as virtual CDs. It is opt-in because the protocol has no CHAP; enable it
+  # only with a non-empty subnet allowlist and matching firewall rules.
+  iscsi_enabled: false
   iscsi_port: 3260
-  # Dashboard/API listen address. Bind to a management VLAN IP to restrict it.
-  dashboard_bind: "0.0.0.0:8443"
+  iscsi_max_connections: 768
+  iscsi_max_connections_per_ip: 8
+  # Dashboard/API listen address. Loopback is the secure first-run default.
+  # To bind a management-VLAN address, configure BOTH TLS files below and set
+  # auth.admin_password_hash; API tokens alone do not enable the browser UI.
+  # Exposed plaintext/anonymous management is rejected.
+  dashboard_bind: "127.0.0.1:8443"
+  dashboard_tls_cert: ""
+  dashboard_tls_key: ""
 
 images:
   dir: images
@@ -31,6 +47,7 @@ images:
     Win11_24H2_English_x64.iso:
       display_name: "Windows 11 24H2"
       answer_file: autounattend.xml
+      # strategy: wimboot  # auto-detect unless explicitly forced
 
 menu:
   title: "Emberboot Network Boot — TSM"
@@ -39,10 +56,20 @@ menu:
 security:
   # false = unknown MACs get no boot service (lockdown)
   allow_unknown_macs: true
+  # Signed boot URLs are also bound to Client IP/MAC, selected Image digest,
+  # policy, and answer file. Valid range: 15-1440 minutes.
+  boot_grant_ttl_minutes: 720
+  # The embedded iSCSI target has no CHAP. Empty denies all iSCSI clients.
+  # Add only boot VLANs that require the virtual-CD strategy, and also filter
+  # TCP 3260 at the host/upstream firewall. Required for a forced iscsi image.
+  iscsi_allowed_subnets: []
+  # iscsi_allowed_subnets: [192.168.10.0/24]
 
 auth:
   # bcrypt hash for dashboard login; generate with: emberbootd hash-password
   admin_password_hash: ""
+  # Create tokens in the console. Only one-way SHA-256 verifiers are stored;
+  # legacy plaintext records are migrated before listeners start.
   api_tokens: []
 
 alerts:

@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOFLAGS: -mod=readonly
+  GOTOOLCHAIN: local
+
+jobs:
+  quality:
+    name: Format, vet, and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify module downloads
+        run: go mod verify
+      - name: Check formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: Vet
+        run: go vet ./...
+      - name: Unit tests
+        run: go test -count=1 -coverprofile=coverage.out ./...
+      - name: Race detector
+        run: go test -count=1 -race ./...
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: error
+          retention-days: 14
+
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build daemon
+        run: go build -trimpath ./cmd/emberbootd
+      - name: Build ISO test utility
+        run: go build -trimpath ./tools/geniso
+
+  container-build:
+    name: Build production container
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and inspect Dockerfile
+        shell: bash
+        run: |
+          version="ci-${GITHUB_SHA::12}"
+          docker build --build-arg VERSION="$version" -t emberboot-ci -f deploy/Dockerfile .
+          test "$(docker image inspect --format '{{.Config.User}}' emberboot-ci)" = "65532:65532"
+          test "$(docker run --rm --entrypoint /emberbootd emberboot-ci -version)" = "$version"
+
+  vulnerability-scan:
+    name: Go vulnerability scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Scan reachable dependencies
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...

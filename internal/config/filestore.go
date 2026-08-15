@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
 
 	"github.com/goccy/go-yaml"
 )
@@ -21,7 +24,7 @@ type PatchOp struct {
 
 // RawBytes returns the config file as it is on disk.
 func (m *Manager) RawBytes() ([]byte, error) {
-	return os.ReadFile(m.path)
+	return readConfigFile(m.path)
 }
 
 // SaveRaw validates a complete replacement document and, if valid, writes it
@@ -34,18 +37,100 @@ func (m *Manager) SaveRaw(data []byte) error {
 }
 
 func (m *Manager) saveRawLocked(data []byte) error {
-	if _, err := Parse(data); err != nil {
+	normalized, cfg, migrated, err := normalizeConfigAPITokens(data)
+	if err != nil {
 		return err
 	}
-	tmp := m.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	if err := ValidateRuntimePathTopology(m.path, cfg); err != nil {
+		return err
+	}
+	if err := writeConfigAtomic(m.path, normalized); err != nil {
+		return err
+	}
+	if migrated > 0 {
+		m.log.Info("migrated plaintext API tokens to one-way verifiers", "count", migrated)
+	}
+	return m.reloadLocked()
+}
+
+// writeConfigAtomic durably replaces a validated config document with private
+// permissions. Callers must hold Manager.writeMu when the target belongs to a
+// live manager.
+func writeConfigAtomic(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, ".emberboot-config-*")
+	if err != nil {
+		return fmt.Errorf("create config temp file: %w", err)
+	}
+	tmp := f.Name()
+	ok := false
+	defer func() {
+		_ = f.Close()
+		if !ok {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err := f.Chmod(0o600); err != nil {
+		return fmt.Errorf("secure config temp file: %w", err)
+	}
+	if _, err := f.Write(data); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
-	if err := os.Rename(tmp, m.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("write config: %w", err)
+	if err := f.Sync(); err != nil {
+		return fmt.Errorf("sync config: %w", err)
 	}
-	return m.Reload()
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close config: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("replace config: %w", err)
+	}
+	if err := syncConfigDir(dir); err != nil {
+		return fmt.Errorf("sync config directory: %w", err)
+	}
+	ok = true
+	return nil
+}
+
+func syncConfigDir(dir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
+}
+
+// normalizeConfigAPITokens validates data and replaces legacy plaintext API
+// tokens before the document is allowed to reach disk through a manager write.
+// Re-rendering is limited to the migration case; ordinary raw saves retain the
+// caller's formatting exactly.
+func normalizeConfigAPITokens(data []byte) ([]byte, *Config, int, error) {
+	cfg, err := Parse(data)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	tokens, changed := NormalizeLegacyAPITokens(cfg.Auth.APITokens)
+	if changed == 0 {
+		return data, cfg, 0, nil
+	}
+	var doc yaml.MapSlice
+	if err := yaml.UnmarshalWithOptions(data, &doc, yaml.UseOrderedMap()); err != nil {
+		return nil, nil, 0, fmt.Errorf("parse config for token migration: %w", err)
+	}
+	doc = setPath(doc, []string{"auth", "api_tokens"}, tokens)
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("render config after token migration: %w", err)
+	}
+	normalized, err := Parse(out)
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("validate config after token migration: %w", err)
+	}
+	return out, normalized, changed, nil
 }
 
 // Patch applies structured mutations to the file. The document keeps its key
@@ -55,7 +140,7 @@ func (m *Manager) Patch(ops []PatchOp) error {
 	m.writeMu.Lock()
 	defer m.writeMu.Unlock()
 
-	data, err := os.ReadFile(m.path)
+	data, err := readConfigFile(m.path)
 	if err != nil {
 		return fmt.Errorf("read config: %w", err)
 	}
@@ -73,6 +158,43 @@ func (m *Manager) Patch(ops []PatchOp) error {
 			doc = setPath(doc, op.Path, op.Value)
 		}
 	}
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("render config: %w", err)
+	}
+	return m.saveRawLocked(out)
+}
+
+// UpdateAPITokens atomically performs a read-modify-write of the token list.
+// The callback runs while the config write lock is held and receives a copy;
+// it must not retain the slice or call another Manager write method.
+func (m *Manager) UpdateAPITokens(update func(current []string) ([]string, error)) error {
+	if update == nil {
+		return fmt.Errorf("API token update callback is nil")
+	}
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
+
+	data, err := readConfigFile(m.path)
+	if err != nil {
+		return fmt.Errorf("read config: %w", err)
+	}
+	cfg, err := Parse(data)
+	if err != nil {
+		return err
+	}
+	next, err := update(append([]string(nil), cfg.Auth.APITokens...))
+	if err != nil {
+		return err
+	}
+	if slices.Equal(next, cfg.Auth.APITokens) {
+		return nil
+	}
+	var doc yaml.MapSlice
+	if err := yaml.UnmarshalWithOptions(data, &doc, yaml.UseOrderedMap()); err != nil {
+		return fmt.Errorf("parse config: %w", err)
+	}
+	doc = setPath(doc, []string{"auth", "api_tokens"}, append([]string(nil), next...))
 	out, err := yaml.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("render config: %w", err)

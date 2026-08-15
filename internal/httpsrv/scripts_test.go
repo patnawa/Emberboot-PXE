@@ -24,7 +24,7 @@ func testCfg(t *testing.T) *config.Config {
 func readyImage(name string, strategy images.Strategy, plan images.BootPlan) images.Image {
 	return images.Image{
 		FileName: name, DisplayName: name, State: images.StateReady,
-		Strategy: strategy, Plan: plan,
+		Strategy: strategy, Plan: plan, SHA256: strings.Repeat("a", 64),
 	}
 }
 
@@ -158,17 +158,14 @@ func TestESDKeepsExtensionInScript(t *testing.T) {
 	}
 }
 
-func TestRAMGateRefusesSmallClients(t *testing.T) {
+func TestRAMRequirementWarnsWithoutFalseFirmwareGate(t *testing.T) {
 	img := readyImage("big.iso", images.StrategyLinuxExtract, images.BootPlan{
 		Family: "ubuntu-casper", Kernel: "casper/vmlinuz", Initrds: []string{"casper/initrd"},
 		RAMLoadMB: 6000,
 	})
 	blocked := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 4096)
-	if strings.Contains(blocked, "kernel ") || !strings.Contains(blocked, "only 4096 MB") {
-		t.Errorf("4GB client must be refused a 6GB RAM-load with a clear message:\n%s", blocked)
-	}
-	if !strings.Contains(blocked, "chain "+testBase+"/boot.ipxe") {
-		t.Error("refusal must route back to the menu")
+	if !strings.Contains(blocked, "kernel ") || !strings.Contains(blocked, "approximately 6000 MB") {
+		t.Errorf("script must warn but not falsely gate on unavailable firmware RAM telemetry:\n%s", blocked)
 	}
 	allowed := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 8192)
 	if !strings.Contains(allowed, "kernel ") {
@@ -181,9 +178,10 @@ func TestRAMGateRefusesSmallClients(t *testing.T) {
 }
 
 func TestISCSIScript(t *testing.T) {
-	img := readyImage("debian-12.5.0-amd64-netinst.iso", images.StrategyISCSI, images.BootPlan{Family: "debian-installer"})
+	const fileName = "debian-12.5.0-amd64-netinst.iso"
+	img := readyImage(fileName, images.StrategyISCSI, images.BootPlan{Family: "debian-installer"})
 	s := imageScript(testCfg(t), img, testMAC(t), nil, testBase, 0)
-	want := "sanboot --keep iscsi:10.0.0.5::::iqn.2026-08.local.emberboot:debian-12.5.0-amd64-netinst"
+	want := "sanboot --keep iscsi:10.0.0.5::::iqn.2026-08.local.emberboot:" + images.TargetVersionSuffix(fileName, img.SHA256)
 	if !strings.Contains(s, want) {
 		t.Errorf("iSCSI script must attach the virtual CD with --keep (iBFT for OS reattach); want %q in:\n%s", want, s)
 	}
@@ -195,9 +193,11 @@ func TestISCSIScript(t *testing.T) {
 func TestISCSIScriptCustomPort(t *testing.T) {
 	cfg := testCfg(t)
 	cfg.Network.ISCSIPort = 13260
-	img := readyImage("x.iso", images.StrategyISCSI, images.BootPlan{Family: "unknown"})
+	const fileName = "x.iso"
+	img := readyImage(fileName, images.StrategyISCSI, images.BootPlan{Family: "unknown"})
 	s := imageScript(cfg, img, testMAC(t), nil, testBase, 0)
-	if !strings.Contains(s, "iscsi:10.0.0.5::13260:0:iqn.2026-08.local.emberboot:x") {
+	want := "iscsi:10.0.0.5::13260:0:iqn.2026-08.local.emberboot:" + images.TargetVersionSuffix(fileName, img.SHA256)
+	if !strings.Contains(s, want) {
 		t.Errorf("custom iSCSI port must appear in the SAN URI:\n%s", s)
 	}
 }

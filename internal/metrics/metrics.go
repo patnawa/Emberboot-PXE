@@ -14,18 +14,21 @@ import (
 type M struct {
 	reg *prometheus.Registry
 
-	DHCPRequests   *prometheus.CounterVec // stage: discover|pxe_request|ipxe_script
-	DHCPIgnored    prometheus.Counter
-	RogueDetected  prometheus.Counter
-	TFTPTransfers  *prometheus.CounterVec // file, result: ok|error
-	HTTPPayloadBytes prometheus.Counter
-	HTTPRequests   *prometheus.CounterVec // kind: script|iso|file|answer, code
-	ImagesReady    prometheus.Gauge
-	ImagesInvalid  prometheus.Gauge
-	ConfigReloads  *prometheus.CounterVec // result: ok|rejected
-	SessionsActive prometheus.Gauge
-	Sessions       *prometheus.CounterVec // result: completed|failed|stalled
-	AlertsFired    *prometheus.CounterVec // kind
+	DHCPRequests            *prometheus.CounterVec // stage: discover|pxe_request|ipxe_script
+	DHCPIgnored             prometheus.Counter
+	RogueDetected           prometheus.Counter
+	TFTPTransfers           *prometheus.CounterVec // file is an allow-listed boot file or "other"
+	HTTPPayloadBytes        prometheus.Counter
+	HTTPRequests            *prometheus.CounterVec // kind: script|iso|file|answer, code
+	BootAdmissionRejected   *prometheus.CounterVec // resource: connection|stream
+	ImagesReady             prometheus.Gauge
+	ImagesInvalid           prometheus.Gauge
+	ConfigReloads           *prometheus.CounterVec // result: ok|rejected
+	SessionsActive          prometheus.Gauge
+	Sessions                *prometheus.CounterVec // result: handoff|failed|stalled
+	SessionTelemetryDropped *prometheus.CounterVec // operation: touch|meta|finish
+	AlertsFired             *prometheus.CounterVec // kind
+	ManagementAuth          *prometheus.CounterVec // result: failed|blocked
 }
 
 // New creates the registry and all metrics.
@@ -61,6 +64,10 @@ func New() *M {
 			Name: "emberboot_http_requests_total",
 			Help: "Boot HTTP requests, by kind and status code.",
 		}, []string{"kind", "code"}),
+		BootAdmissionRejected: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "emberboot_boot_admission_rejected_total",
+			Help: "Boot HTTP work rejected at a configured capacity limit, by resource.",
+		}, []string{"resource"}),
 		ImagesReady: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "emberboot_images_ready",
 			Help: "Images currently Ready (validated and offered).",
@@ -81,15 +88,24 @@ func New() *M {
 			Name: "emberboot_boot_sessions_total",
 			Help: "Finished Boot Sessions, by result.",
 		}, []string{"result"}),
+		SessionTelemetryDropped: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "emberboot_session_telemetry_dropped_total",
+			Help: "Boot-session telemetry operations dropped to keep boot traffic non-blocking, by operation.",
+		}, []string{"operation"}),
 		AlertsFired: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "emberboot_alerts_fired_total",
 			Help: "Alerts fired, by kind.",
 		}, []string{"kind"}),
+		ManagementAuth: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "emberboot_management_auth_total",
+			Help: "Management authentication failures and rate-limit blocks, by result.",
+		}, []string{"result"}),
 	}
 	reg.MustRegister(
 		m.DHCPRequests, m.DHCPIgnored, m.RogueDetected, m.TFTPTransfers,
-		m.HTTPPayloadBytes, m.HTTPRequests, m.ImagesReady, m.ImagesInvalid,
-		m.ConfigReloads, m.SessionsActive, m.Sessions, m.AlertsFired,
+		m.HTTPPayloadBytes, m.HTTPRequests, m.BootAdmissionRejected, m.ImagesReady, m.ImagesInvalid,
+		m.ConfigReloads, m.SessionsActive, m.Sessions, m.SessionTelemetryDropped,
+		m.AlertsFired, m.ManagementAuth,
 	)
 	return m
 }

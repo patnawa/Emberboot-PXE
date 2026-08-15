@@ -18,12 +18,12 @@ import (
 type Kind string
 
 const (
-	CrashRestart    Kind = "crash_restart"     // service started after unclean exit
-	ImageInvalid    Kind = "image_invalid"     // Image failed validation
-	FailureSpike    Kind = "failure_spike"     // Boot Session failure-rate spike
-	DiskLow         Kind = "disk_low"          // image volume free space low
-	ConfigRejected  Kind = "config_rejected"   // reload rejected, last-known-good serving
-	RoguePXEServer  Kind = "rogue_pxe_server"  // another PXE responder heard on the wire
+	CrashRestart   Kind = "crash_restart"    // service started after unclean exit
+	ImageInvalid   Kind = "image_invalid"    // Image failed validation
+	FailureSpike   Kind = "failure_spike"    // Boot Session failure-rate spike
+	DiskLow        Kind = "disk_low"         // image volume free space low
+	ConfigRejected Kind = "config_rejected"  // reload rejected, last-known-good serving
+	RoguePXEServer Kind = "rogue_pxe_server" // another PXE responder heard on the wire
 )
 
 // Alert is the webhook payload and the dashboard history entry.
@@ -39,7 +39,17 @@ type Alert struct {
 // server answering every DHCP request must not page every three seconds.
 const dedupeWindow = 15 * time.Minute
 
-const historySize = 200
+const (
+	historySize       = 200
+	maxDedupeKeys     = 2048
+	deliveryQueueSize = 64
+	deliveryWorkers   = 2
+)
+
+type delivery struct {
+	url   string
+	alert Alert
+}
 
 // Notifier fires alerts. Safe for concurrent use. The webhook URL and site
 // are read per-alert so config hot-reloads take effect immediately.
@@ -48,20 +58,36 @@ type Notifier struct {
 	client  *http.Client
 	setting func() (site, webhookURL string)
 
-	mu      sync.Mutex
-	lastFired map[string]time.Time
-	history []Alert
+	mu         sync.Mutex
+	lastFired  map[string]time.Time
+	history    []Alert
+	accepted   func(Kind)
+	deliveries chan delivery
+	lastDrop   time.Time
 }
 
 // New creates a Notifier. setting returns the current site name and webhook
 // URL (empty URL = log-only).
 func New(log *slog.Logger, setting func() (site, webhookURL string)) *Notifier {
-	return &Notifier{
-		log:       log,
-		client:    &http.Client{Timeout: 10 * time.Second},
-		setting:   setting,
-		lastFired: map[string]time.Time{},
+	n := &Notifier{
+		log:        log,
+		client:     &http.Client{Timeout: 10 * time.Second},
+		setting:    setting,
+		lastFired:  map[string]time.Time{},
+		deliveries: make(chan delivery, deliveryQueueSize),
 	}
+	for range deliveryWorkers {
+		go n.deliveryWorker()
+	}
+	return n
+}
+
+// OnAccepted installs a hook called after dedupe accepts an alert. It is used
+// for metrics so direct producers and main-owned producers count identically.
+func (n *Notifier) OnAccepted(hook func(Kind)) {
+	n.mu.Lock()
+	n.accepted = hook
+	n.mu.Unlock()
 }
 
 // Fire raises an alert. dedupeKey groups repeats (use "" when every
@@ -71,24 +97,55 @@ func (n *Notifier) Fire(kind Kind, dedupeKey, message string, details map[string
 	a := Alert{Site: site, Kind: kind, Message: message, Details: details, Time: time.Now()}
 
 	n.mu.Lock()
-	key := string(kind) + "|" + dedupeKey
-	if last, ok := n.lastFired[key]; ok && time.Since(last) < dedupeWindow {
-		n.mu.Unlock()
-		n.log.Debug("alert suppressed (dedupe)", "kind", kind, "key", dedupeKey)
-		return
+	if dedupeKey != "" {
+		key := string(kind) + "|" + dedupeKey
+		if last, ok := n.lastFired[key]; ok && a.Time.Sub(last) < dedupeWindow {
+			n.mu.Unlock()
+			n.log.Debug("alert suppressed (dedupe)", "kind", kind, "key", dedupeKey)
+			return
+		}
+		if len(n.lastFired) >= maxDedupeKeys {
+			oldestKey := ""
+			var oldest time.Time
+			for existingKey, fired := range n.lastFired {
+				if a.Time.Sub(fired) >= dedupeWindow {
+					delete(n.lastFired, existingKey)
+					continue
+				}
+				if oldestKey == "" || fired.Before(oldest) {
+					oldestKey, oldest = existingKey, fired
+				}
+			}
+			if len(n.lastFired) >= maxDedupeKeys {
+				delete(n.lastFired, oldestKey)
+			}
+		}
+		n.lastFired[key] = a.Time
 	}
-	n.lastFired[key] = a.Time
 	n.history = append(n.history, a)
 	if len(n.history) > historySize {
 		n.history = n.history[len(n.history)-historySize:]
 	}
+	accepted := n.accepted
 	n.mu.Unlock()
 
 	n.log.Warn("alert", "kind", kind, "message", message, "details", details)
+	if accepted != nil {
+		accepted(kind)
+	}
 	if url == "" {
 		return
 	}
-	go n.deliver(url, a)
+	select {
+	case n.deliveries <- delivery{url: url, alert: a}:
+	default:
+		n.mu.Lock()
+		if a.Time.Sub(n.lastDrop) >= time.Minute {
+			n.lastDrop = a.Time
+			n.log.Error("alert delivery queue full; dropping webhook", "kind", kind)
+		}
+		n.mu.Unlock()
+	}
 }
 
 // History returns recent alerts, newest last, for the dashboard.
@@ -127,5 +184,11 @@ func (n *Notifier) deliver(url string, a Alert) {
 			time.Sleep(backoff)
 			backoff *= 2
 		}
+	}
+}
+
+func (n *Notifier) deliveryWorker() {
+	for d := range n.deliveries {
+		n.deliver(d.url, d.alert)
 	}
 }

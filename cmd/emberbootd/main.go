@@ -5,14 +5,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -31,6 +37,7 @@ import (
 	"emberboot/internal/logging"
 	"emberboot/internal/metrics"
 	"emberboot/internal/netutil"
+	"emberboot/internal/rules"
 	"emberboot/internal/sessions"
 	"emberboot/internal/tftpsrv"
 )
@@ -39,7 +46,10 @@ var version = "dev" // overridden via -ldflags at release build
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "hash-password" {
-		hashPassword()
+		if err := hashPassword(); err != nil {
+			fmt.Fprintln(os.Stderr, "hash-password:", err)
+			os.Exit(1)
+		}
 		return
 	}
 	if err := run(); err != nil {
@@ -48,21 +58,49 @@ func main() {
 	}
 }
 
-// hashPassword generates the bcrypt hash for auth.admin_password_hash.
-func hashPassword() {
+const (
+	minAdminPasswordBytes = 12
+	maxAdminPasswordBytes = 72
+)
+
+// hashPassword reads and confirms a password before printing the bcrypt hash
+// used by auth.admin_password_hash.
+func hashPassword() error {
 	fmt.Fprint(os.Stderr, "Password: ")
 	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "reading password:", err)
-		os.Exit(1)
+		return fmt.Errorf("read password: %w", err)
 	}
-	hash, err := bcrypt.GenerateFromPassword(pw, bcrypt.DefaultCost)
+	fmt.Fprint(os.Stderr, "Confirm password: ")
+	confirmation, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "hashing:", err)
-		os.Exit(1)
+		return fmt.Errorf("read password confirmation: %w", err)
+	}
+	hash, err := hashAdminPassword(pw, confirmation)
+	if err != nil {
+		return err
 	}
 	fmt.Println(string(hash))
+	return nil
+}
+
+func hashAdminPassword(password, confirmation []byte) ([]byte, error) {
+	if len(password) < minAdminPasswordBytes {
+		return nil, fmt.Errorf("password must be at least %d UTF-8 bytes", minAdminPasswordBytes)
+	}
+	if len(password) > maxAdminPasswordBytes {
+		return nil, fmt.Errorf("password must be at most %d UTF-8 bytes", maxAdminPasswordBytes)
+	}
+	if !bytes.Equal(password, confirmation) {
+		return nil, fmt.Errorf("password confirmation does not match")
+	}
+	hash, err := bcrypt.GenerateFromPassword(password, bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash password: %w", err)
+	}
+	return hash, nil
 }
 
 // createStarterConfig writes a minimal working config on first run, so a
@@ -88,13 +126,15 @@ site: %s
 
 network:
   dhcp_mode: proxy            # coexists with your existing DHCP server
-  dashboard_bind: "0.0.0.0:8443"
+  # First-run management is local-only. Set a password and TLS certificate
+  # before changing this to a management-VLAN address.
+  dashboard_bind: "127.0.0.1:8443"
 
 images:
   dir: images                 # drop ISOs here
   answers_dir: answers
 `, site)
-	if err := os.WriteFile(path, []byte(starter), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(starter), 0o600); err != nil {
 		return fmt.Errorf("create starter config: %w", err)
 	}
 	log.Info("no config file found; created a starter config", "path", path, "site", site)
@@ -125,7 +165,29 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if migrated, err := httpsrv.MigrateLegacyAPITokens(mgr); err != nil {
+		return fmt.Errorf("secure legacy API tokens: %w", err)
+	} else if migrated > 0 {
+		boot.Info("migrated plaintext API tokens to one-way verifiers", "count", migrated)
+	}
 	cfg := mgr.Current()
+	runtimeCfg := *cfg // immutable restart-bound listener/path snapshot
+	runtimeISCSIEnabled := runtimeCfg.ISCSIActive()
+	if err := config.ValidateRuntimePathTopology(*configPath, &runtimeCfg); err != nil {
+		return fmt.Errorf("unsafe runtime path layout: %w", err)
+	}
+	if err := secureRegularFile(*configPath, 0o600); err != nil {
+		return fmt.Errorf("secure config file: %w", err)
+	}
+	if cfg.Network.DashboardTLSCert != "" {
+		if _, err := tls.LoadX509KeyPair(cfg.Network.DashboardTLSCert, cfg.Network.DashboardTLSKey); err != nil {
+			return fmt.Errorf("dashboard TLS certificate/key: %w", err)
+		}
+	}
+	grantKey, err := loadOrCreateSecret(filepath.Join(filepath.Dir(runtimeCfg.Sessions.DBPath), "boot-grant.key"))
+	if err != nil {
+		return fmt.Errorf("boot authorization key: %w", err)
+	}
 	log := slog.New(ring).With("site", cfg.Site)
 	log.Info("emberbootd starting", "version", version, "config", *configPath)
 
@@ -138,6 +200,9 @@ func run() error {
 		}
 	}
 	advertise = advertise.To4()
+	if advertise == nil {
+		return fmt.Errorf("network.advertise_ip must be an IPv4 address")
+	}
 	httpBase := fmt.Sprintf("http://%s", net.JoinHostPort(advertise.String(), strconv.Itoa(cfg.Network.HTTPPort)))
 	log.Info("network identity", "advertise_ip", advertise.String(), "http_base", httpBase,
 		"dhcp_mode", string(cfg.Network.DHCPMode))
@@ -147,8 +212,10 @@ func run() error {
 		c := mgr.Current()
 		return c.Site, c.Alerts.WebhookURL
 	})
-	notifierFire := func(kind alerts.Kind, key, msg string, details map[string]string) {
+	notifier.OnAccepted(func(kind alerts.Kind) {
 		m.AlertsFired.WithLabelValues(string(kind)).Inc()
+	})
+	notifierFire := func(kind alerts.Kind, key, msg string, details map[string]string) {
 		notifier.Fire(kind, key, msg, details)
 	}
 
@@ -160,6 +227,17 @@ func run() error {
 	if wasUnclean {
 		notifierFire(alerts.CrashRestart, "", "service restarted after an unclean exit", nil)
 	}
+	cleanExit := false
+	// This defer was registered before service cleanup defers, so it runs
+	// last. A hung/failed teardown is never recorded as a clean stop.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			panic(recovered) // keep the crash marker armed on teardown panic
+		}
+		if cleanExit {
+			disarm()
+		}
+	}()
 
 	// Config reload wiring: metrics + alert on rejection.
 	mgr.OnChange(func(*config.Config) { m.ConfigReloads.WithLabelValues("ok").Inc() })
@@ -176,6 +254,7 @@ func run() error {
 	}
 	defer store.Close()
 	store.OnFinish(func(result string) { m.Sessions.WithLabelValues(result).Inc() })
+	store.OnDrop(func(operation string) { m.SessionTelemetryDropped.WithLabelValues(operation).Inc() })
 	go func() {
 		t := time.NewTicker(10 * time.Second)
 		defer t.Stop()
@@ -207,6 +286,7 @@ func run() error {
 	if err := imgMgr.Start(ctx); err != nil {
 		return err
 	}
+	defer imgMgr.Close()
 	mgr.OnChange(func(*config.Config) { imgMgr.OnConfigChange() })
 
 	// Config file watcher.
@@ -216,7 +296,7 @@ func run() error {
 		return err
 	}
 
-	errc := make(chan error, 4)
+	errc := make(chan error, 8)
 
 	// DHCP (proxyDHCP and/or PXE port 4011) + rogue detection.
 	dhcpServer, err := dhcpsrv.New(dhcpsrv.Deps{
@@ -241,24 +321,65 @@ func run() error {
 	}()
 	defer tftpServer.Shutdown()
 
-	// iSCSI target: virtual CDs for images that cannot netboot otherwise.
-	iscsiServer := iscsisrv.New(iscsisrv.Deps{
-		Log:         log,
-		Provider:    imgMgr,
-		AdvertiseIP: advertise.String(),
-		Port:        cfg.Network.ISCSIPort,
-		OnAttach: func(clientIP, target string) {
-			store.TouchByIP(clientIP, "payload", "attached iSCSI virtual CD "+target)
-			log.Info("iscsi attach", "client", clientIP, "target", target)
-		},
-	})
-	go func() { errc <- fmt.Errorf("iscsi: %w", iscsiServer.Serve()) }()
-	defer iscsiServer.Close()
+	// The optional iSCSI target starts only when explicitly enabled (or when
+	// a legacy config has an ACL). Direct target access receives the same
+	// current deny/menu policy as signed HTTP boot paths.
+	if runtimeISCSIEnabled {
+		iscsiServer := iscsisrv.New(iscsisrv.Deps{
+			Log: log, Provider: imgMgr, AdvertiseIP: advertise.String(),
+			Port:                runtimeCfg.Network.ISCSIPort,
+			MaxConnections:      runtimeCfg.Network.ISCSIMaxConnections,
+			MaxConnectionsPerIP: runtimeCfg.Network.ISCSIMaxConnectionsPerIP,
+			AllowSourceIP: func(ip net.IP) bool {
+				for _, cidr := range mgr.Current().Security.ISCSIAllowedSubnets {
+					_, network, parseErr := net.ParseCIDR(cidr)
+					if parseErr == nil && network.Contains(ip) {
+						return true
+					}
+				}
+				return false
+			},
+			AllowTarget: func(clientIP net.IP, suffix string) bool {
+				img, ok := imgMgr.ImageForTarget(suffix)
+				if !ok || clientIP == nil {
+					return false
+				}
+				var mac net.HardwareAddr
+				if known := store.MACForIP(clientIP.String()); known != "" {
+					mac, _ = net.ParseMAC(known)
+				}
+				decision := rules.Evaluate(mgr.Current(), mac, clientIP)
+				return !decision.Deny && (decision.Menu == nil || slices.Contains(decision.Menu, img.FileName))
+			},
+			OnAttach: func(clientIP, target string) {
+				id := store.TouchByIP(clientIP, "payload", "attached iSCSI virtual CD "+target)
+				store.FinishID(id, sessions.ResultHandoff,
+					"iSCSI virtual CD attached; handing control to the client (OS boot not confirmed)")
+				log.Info("iscsi attach", "client", clientIP, "target", target)
+			},
+		})
+		go func() { errc <- fmt.Errorf("iscsi: %w", iscsiServer.Serve()) }()
+		defer iscsiServer.Close()
+		log.Info("iSCSI target enabled", "port", runtimeCfg.Network.ISCSIPort,
+			"max_connections", runtimeCfg.Network.ISCSIMaxConnections,
+			"max_per_ip", runtimeCfg.Network.ISCSIMaxConnectionsPerIP)
+	} else {
+		log.Info("iSCSI target disabled; no listener opened")
+	}
 
-	// Boot HTTP.
-	bootHTTP := httpsrv.NewBoot(httpsrv.BootDeps{
+	// Boot HTTP. Its grant key is durable so installer stage-two URLs remain
+	// valid across service restarts/upgrades.
+	bootHTTP, err := httpsrv.NewBoot(httpsrv.BootDeps{
 		Log: log, Cfg: mgr.Current, Images: imgMgr, Metrics: m, Sessions: store,
+		GrantKey: grantKey, RuntimeISCSIPort: runtimeCfg.Network.ISCSIPort,
+		RuntimeISCSIEnabled:        &runtimeISCSIEnabled,
+		RuntimeAnswersDir:          runtimeCfg.Images.AnswersDir,
+		RuntimeHTTPMaxStreams:      runtimeCfg.Network.HTTPMaxStreams,
+		RuntimeHTTPMaxStreamsPerIP: runtimeCfg.Network.HTTPMaxStreamsPerIP,
 	}, ":"+strconv.Itoa(cfg.Network.HTTPPort))
+	if err != nil {
+		return err
+	}
 	go func() { errc <- fmt.Errorf("boot http: %w", bootHTTP.Serve()) }()
 	defer bootHTTP.Close()
 
@@ -268,11 +389,18 @@ func run() error {
 			Log: log, Cfg: mgr, Images: imgMgr, Sessions: store, Alerts: notifier,
 			Metrics: m, Version: version, StartTime: start,
 			AdvertiseIP: advertise.String(), HTTPBase: httpBase,
-			LogRing: ring, RogueActive: dhcpServer.RogueDetectionActive,
+			RuntimeConfig: &runtimeCfg,
+			LogRing:       ring, RogueActive: dhcpServer.RogueDetectionActive,
 		}, bind)
-		go func() { errc <- fmt.Errorf("dashboard: %w", api.Serve()) }()
+		if cfg.Network.DashboardTLSCert != "" {
+			go func() {
+				errc <- fmt.Errorf("dashboard: %w", api.ServeTLS(cfg.Network.DashboardTLSCert, cfg.Network.DashboardTLSKey))
+			}()
+		} else {
+			go func() { errc <- fmt.Errorf("dashboard: %w", api.Serve()) }()
+		}
 		defer api.Close()
-		log.Info("dashboard listening", "addr", bind)
+		log.Info("dashboard listening", "addr", bind, "tls", cfg.Network.DashboardTLSCert != "")
 	}
 
 	log.Info("emberbootd ready",
@@ -283,11 +411,147 @@ func run() error {
 	select {
 	case s := <-sig:
 		log.Info("shutting down", "signal", s.String())
-		disarm() // clean exit: no crash alert next start
+		cleanExit = true
 		return nil
 	case err := <-errc:
 		// A dead listener is fatal by design (crash-only): supervision
 		// restarts us, and the crash marker fires the alert.
 		return err
 	}
+}
+
+// loadOrCreateSecret returns a durable, owner-only 32-byte secret. A fully
+// written/fsynced temporary inode is hard-linked into place atomically, so a
+// concurrent first start can never observe a zero-length or partial key.
+func loadOrCreateSecret(path string) ([]byte, error) {
+	parent := filepath.Dir(path)
+	if err := os.MkdirAll(parent, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(parent, 0o700); err != nil {
+		return nil, fmt.Errorf("secure secret directory: %w", err)
+	}
+	for {
+		data, exists, err := readSecretFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+			if len(data) == 32 {
+				return data, nil
+			}
+			return nil, fmt.Errorf("%s has %d bytes, want 32", path, len(data))
+		}
+
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+		published, err := publishSecretCandidate(parent, path, key)
+		if err != nil {
+			return nil, err
+		}
+		if published {
+			return key, nil
+		}
+	}
+}
+
+func publishSecretCandidate(parent, path string, key []byte) (published bool, retErr error) {
+	f, err := os.CreateTemp(parent, ".boot-grant-key-*")
+	if err != nil {
+		return false, err
+	}
+	tmp := f.Name()
+	defer func() {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+	}()
+	if err := f.Chmod(0o600); err != nil {
+		return false, err
+	}
+	if _, err := io.Copy(f, bytes.NewReader(key)); err != nil {
+		return false, err
+	}
+	if err := f.Sync(); err != nil {
+		return false, err
+	}
+	if err := f.Close(); err != nil {
+		return false, err
+	}
+	if err := os.Link(tmp, path); err != nil {
+		if os.IsExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("publish secret: %w", err)
+	}
+	if err := syncDirectory(parent); err != nil {
+		return false, fmt.Errorf("sync published secret: %w", err)
+	}
+	if err := os.Remove(tmp); err != nil {
+		return false, err
+	}
+	if err := syncDirectory(parent); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func readSecretFile(path string) ([]byte, bool, error) {
+	pathInfo, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return nil, true, fmt.Errorf("%s must be a regular non-symlink file", path)
+	}
+	f, err := os.Open(path)
+	if os.IsNotExist(err) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, true, err
+	}
+	defer f.Close()
+	openedInfo, err := f.Stat()
+	if err != nil {
+		return nil, true, err
+	}
+	if !openedInfo.Mode().IsRegular() || !os.SameFile(pathInfo, openedInfo) {
+		return nil, true, fmt.Errorf("%s changed while it was opened", path)
+	}
+	if err := f.Chmod(0o600); err != nil {
+		return nil, true, fmt.Errorf("secure %s: %w", path, err)
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 33))
+	if err != nil {
+		return nil, true, err
+	}
+	return data, true, nil
+}
+
+func secureRegularFile(path string, mode os.FileMode) error {
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		return err
+	}
+	if pathInfo.Mode()&os.ModeSymlink != 0 || !pathInfo.Mode().IsRegular() {
+		return fmt.Errorf("%s must be a regular non-symlink file", path)
+	}
+	return os.Chmod(path, mode)
+}
+
+func syncDirectory(dir string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	f, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
 }

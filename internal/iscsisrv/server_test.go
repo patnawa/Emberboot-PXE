@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"testing"
+	"time"
 )
 
 // fakeProvider serves one in-memory "ISO".
@@ -75,7 +77,7 @@ func (in *initiator) recv() *pdu {
 func (in *initiator) login(sessionType, targetName string) *pdu {
 	in.t.Helper()
 	hdr := make([]byte, bhsLen)
-	hdr[0] = 0x40 | opLoginReq // immediate
+	hdr[0] = 0x40 | opLoginReq  // immediate
 	hdr[1] = 0x80 | 0x04 | 0x03 // T, CSG=opneg, NSG=FFP
 	copy(hdr[8:14], []byte{0, 1, 2, 3, 4, 5})
 	binary.BigEndian.PutUint32(hdr[16:20], 0x1000)
@@ -271,5 +273,76 @@ func TestSanitizeSuffix(t *testing.T) {
 		if got := SanitizeSuffix(in); got != want {
 			t.Errorf("SanitizeSuffix(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestSourceIPAdmissionRunsBeforeProtocol(t *testing.T) {
+	called := make(chan net.IP, 1)
+	srv := New(Deps{
+		Log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Provider: &fakeProvider{content: []byte("unused")},
+		AllowSourceIP: func(ip net.IP) bool {
+			called <- append(net.IP(nil), ip...)
+			return false
+		},
+	})
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.ServeListener(ln)
+	t.Cleanup(srv.Close)
+
+	c, err := net.Dial("tcp4", ln.Addr().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	select {
+	case ip := <-called:
+		if !ip.IsLoopback() {
+			t.Fatalf("admission callback got %v, want loopback", ip)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("source admission callback was not called")
+	}
+	if err := c.SetReadDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	var one [1]byte
+	if _, err := c.Read(one[:]); err == nil {
+		t.Fatal("denied connection remained open")
+	}
+}
+
+func TestPreLoginRejectsNonLoginPDU(t *testing.T) {
+	in, _ := startServer(t)
+	hdr := make([]byte, bhsLen)
+	hdr[0] = opNopOut
+	hdr[1] = 0x80
+	binary.BigEndian.PutUint32(hdr[16:20], 1)
+	in.send(hdr, nil)
+	resp := in.recv()
+	if resp.opcode() != opReject {
+		t.Fatalf("pre-login opcode response = %#x, want Reject", resp.opcode())
+	}
+}
+
+func TestReadPDUAppliesOpcodeSpecificBodyLimits(t *testing.T) {
+	var hdr [bhsLen]byte
+	hdr[0] = opSCSIDataOut
+	hdr[7] = 1
+	if _, err := readPDU(bytes.NewReader(hdr[:]), 1<<20); err == nil || !strings.Contains(err.Error(), "exceeds limit 0") {
+		t.Fatalf("Data-Out limit error = %v", err)
+	}
+
+	hdr = [bhsLen]byte{}
+	hdr[0] = opLoginReq
+	length := maxLoginTextData + 1
+	hdr[5] = byte(length >> 16)
+	hdr[6] = byte(length >> 8)
+	hdr[7] = byte(length)
+	if _, err := readPDU(bytes.NewReader(hdr[:]), 1<<20); err == nil || !strings.Contains(err.Error(), "exceeds limit") {
+		t.Fatalf("Login body limit error = %v", err)
 	}
 }

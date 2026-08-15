@@ -60,6 +60,9 @@ func matches(o config.Override, mac string, ip net.IP) bool {
 // macGlobMatch matches a MAC against a glob where '*' spans any suffix and
 // '?' matches one hex digit, e.g. "aa:bb:cc:*", "aa:?b:*".
 func macGlobMatch(pattern, mac string) bool {
+	if mac == "" {
+		return false
+	}
 	pi, mi := 0, 0
 	for pi < len(pattern) {
 		switch pattern[pi] {

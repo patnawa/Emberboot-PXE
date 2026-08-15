@@ -1,0 +1,18 @@
+# Send only daemon build inputs. Keep this list explicit so local media,
+# configs, databases, credentials, VCS metadata, and release artifacts can
+# never enter the container build context.
+**
+!go.mod
+!go.sum
+!cmd/
+!cmd/emberbootd/
+!cmd/emberbootd/*.go
+!internal/
+!internal/**/
+!internal/**/*.go
+!internal/httpsrv/dashboard.html
+!internal/bootfiles/blobs/
+!internal/bootfiles/blobs/**
+
+# Tests are not required to build the production daemon.
+**/*_test.go

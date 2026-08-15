@@ -3,6 +3,7 @@ package dhcpsrv
 import (
 	"net"
 	"strings"
+	"sync"
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
 
@@ -15,7 +16,10 @@ import (
 // is taken (a DHCP client daemon), monitoring is disabled with a warning,
 // never an error.
 type rogueMonitor struct {
-	d    Deps
+	d  Deps
+	mu sync.RWMutex
+	// conn is protected because diagnostics and shutdown can run while the
+	// Serve goroutine is still starting the best-effort monitor.
 	conn net.PacketConn
 }
 
@@ -30,21 +34,33 @@ func (r *rogueMonitor) start() {
 			"(a DHCP client is probably running on this host)", "error", err)
 		return
 	}
+	r.mu.Lock()
 	r.conn = conn
-	go r.loop()
+	r.mu.Unlock()
+	go r.loop(conn)
 	r.d.Log.Info("rogue PXE detection active on udp/68")
 }
 
 func (r *rogueMonitor) stop() {
-	if r.conn != nil {
-		r.conn.Close()
+	r.mu.Lock()
+	conn := r.conn
+	r.conn = nil
+	r.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
 	}
 }
 
-func (r *rogueMonitor) loop() {
+func (r *rogueMonitor) active() bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.conn != nil
+}
+
+func (r *rogueMonitor) loop(conn net.PacketConn) {
 	buf := make([]byte, 4096)
 	for {
-		n, src, err := r.conn.ReadFrom(buf)
+		n, src, err := conn.ReadFrom(buf)
 		if err != nil {
 			return // closed
 		}

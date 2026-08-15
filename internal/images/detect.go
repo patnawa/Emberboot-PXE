@@ -12,7 +12,10 @@ type Strategy string
 const (
 	StrategyLinuxExtract Strategy = "linux-extract"
 	StrategyWimboot      Strategy = "wimboot"
-	StrategyMemdisk      Strategy = "memdisk" // iPXE sanboot http: whole ISO into RAM
+	// StrategyMemdisk is the legacy configuration name for iPXE HTTP SAN.
+	// iPXE reads the remote ISO with HTTP Range requests as virtual media; it
+	// is not MEMDISK and does not require the whole ISO to fit in client RAM.
+	StrategyMemdisk Strategy = "memdisk"
 	// StrategyISCSI serves the ISO as a virtual CD over the embedded iSCSI
 	// target: full media emulation, no RAM limit — the honest tier-iii
 	// (ADR-0003) for ISOs that cannot netboot any other way.
@@ -25,10 +28,10 @@ const (
 // ${ISOURL} (URL of the raw ISO) and ${CONTENT} (URL prefix serving the ISO's
 // internal tree), expanded at script-generation time.
 type BootPlan struct {
-	Family  string            `json:"family"`
-	Kernel  string            `json:"kernel,omitempty"`
-	Initrds []string          `json:"initrds,omitempty"`
-	Args    string            `json:"args,omitempty"`
+	Family  string   `json:"family"`
+	Kernel  string   `json:"kernel,omitempty"`
+	Initrds []string `json:"initrds,omitempty"`
+	Args    string   `json:"args,omitempty"`
 	// Files maps auxiliary labels to in-ISO paths: wimboot pieces for
 	// Windows, "efi" for a chainable standalone EFI application.
 	Files map[string]string `json:"files,omitempty"`
@@ -222,9 +225,9 @@ func detect(h *isoHandle, sizeBytes int64) (Strategy, BootPlan, string, error) {
 	// Fallback for everything unrecognized (BSDs, appliances, old tools):
 	// virtual CD over iSCSI — full media emulation, no RAM limit. A
 	// standalone EFI application (memtest-style) is still chained directly
-	// on UEFI, and sanboot-into-RAM remains the last resort in the script.
-	plan := BootPlan{Family: "unknown", RAMLoadMB: mb(sizeBytes) + 512}
-	reason := "unrecognized layout; served as a virtual CD over iSCSI (Memdisk as last resort)"
+	// on UEFI, and HTTP SAN virtual media remains the last resort.
+	plan := BootPlan{Family: "unknown"}
+	reason := "unrecognized layout; served as a virtual CD over iSCSI (HTTP SAN as last resort)"
 	if sizeBytes < 128<<20 {
 		if efi, ok := h.firstExisting("EFI/BOOT/BOOTX64.EFI", "efi/boot/bootx64.efi"); ok {
 			plan.Files = map[string]string{"efi": efi}

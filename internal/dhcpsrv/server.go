@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
+	"time"
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
@@ -46,15 +48,28 @@ type Deps struct {
 
 // Server owns the DHCP listeners.
 type Server struct {
-	d       Deps
-	proxy   *server4.Server // port 67 (proxy mode only)
-	pxePort *server4.Server // port 4011 (both modes)
-	rogue   *rogueMonitor
+	d               Deps
+	proxy           *server4.Server // port 67 (proxy mode only)
+	pxePort         *server4.Server // port 4011 (both modes)
+	rogue           *rogueMonitor
+	handlerSlots    chan struct{}
+	admissionMu     sync.Mutex
+	windowStart     time.Time
+	windowCount     int
+	limitLogAfter   time.Time
+	limitSuppressed uint64
+	denyLogAfter    time.Time
+	denySuppressed  uint64
 }
+
+const (
+	maxConcurrentHandlers = 256
+	maxPacketsPerSecond   = 2000
+)
 
 // New creates the listeners appropriate for the configured mode.
 func New(d Deps) (*Server, error) {
-	s := &Server{d: d}
+	s := &Server{d: d, handlerSlots: make(chan struct{}, maxConcurrentHandlers)}
 	iface := d.Cfg().Network.Interface
 
 	if d.Cfg().Network.DHCPMode == config.ModeProxy {
@@ -92,7 +107,7 @@ func (s *Server) Serve() error {
 // RogueDetectionActive reports whether the passive udp/68 monitor is running
 // (diagnostics; it is disabled when a DHCP client daemon owns the port).
 func (s *Server) RogueDetectionActive() bool {
-	return s.rogue != nil && s.rogue.conn != nil
+	return s.rogue != nil && s.rogue.active()
 }
 
 // Close stops all listeners.
@@ -107,6 +122,17 @@ func (s *Server) Close() {
 // handlerFor builds the packet handler for one listening port.
 func (s *Server) handlerFor(port int) server4.Handler {
 	return func(conn net.PacketConn, peer net.Addr, m *dhcpv4.DHCPv4) {
+		select {
+		case s.handlerSlots <- struct{}{}:
+			defer func() { <-s.handlerSlots }()
+		default:
+			s.rejectOverload("concurrency")
+			return
+		}
+		if !s.admitPacket(time.Now()) {
+			s.rejectOverload("rate")
+			return
+		}
 		if m == nil || m.OpCode != dhcpv4.OpcodeBootRequest || !isPXERequest(m) {
 			s.d.Metrics.DHCPIgnored.Inc()
 			return
@@ -119,7 +145,7 @@ func (s *Server) handlerFor(port int) server4.Handler {
 		// Deny rules and lockdown apply before any response.
 		dec := rules.Evaluate(cfg, mac, clientIP(m, peer))
 		if dec.Deny {
-			s.d.Log.Info("boot service denied", "mac", mac.String(), "rule", dec.RuleName)
+			s.logDenied(mac.String(), dec.RuleName)
 			s.d.Metrics.DHCPIgnored.Inc()
 			return
 		}
@@ -145,11 +171,64 @@ func (s *Server) handlerFor(port int) server4.Handler {
 			return // unsupported firmware, already logged
 		}
 
-		s.track(m, fw, ipxe, port)
+		s.track(m, peer, fw, ipxe, port)
 		if err := sendResponse(conn, peer, m, resp); err != nil {
 			s.d.Log.Warn("dhcp send failed", "mac", mac.String(), "peer", peer.String(), "error", err)
 		}
 	}
+}
+
+func (s *Server) admitPacket(now time.Time) bool {
+	s.admissionMu.Lock()
+	defer s.admissionMu.Unlock()
+	if s.windowStart.IsZero() || now.Sub(s.windowStart) >= time.Second {
+		s.windowStart = now
+		s.windowCount = 0
+	}
+	if s.windowCount >= maxPacketsPerSecond {
+		return false
+	}
+	s.windowCount++
+	return true
+}
+
+func (s *Server) rejectOverload(reason string) {
+	if s.d.Metrics != nil {
+		s.d.Metrics.DHCPIgnored.Inc()
+	}
+	if s.d.Log == nil {
+		return
+	}
+	now := time.Now()
+	s.admissionMu.Lock()
+	if now.Before(s.limitLogAfter) {
+		s.limitSuppressed++
+		s.admissionMu.Unlock()
+		return
+	}
+	hidden := s.limitSuppressed
+	s.limitSuppressed = 0
+	s.limitLogAfter = now.Add(30 * time.Second)
+	s.admissionMu.Unlock()
+	s.d.Log.Warn("DHCP handler capacity limit reached", "reason", reason, "suppressed_since_last", hidden)
+}
+
+func (s *Server) logDenied(mac, rule string) {
+	if s.d.Log == nil {
+		return
+	}
+	now := time.Now()
+	s.admissionMu.Lock()
+	if now.Before(s.denyLogAfter) {
+		s.denySuppressed++
+		s.admissionMu.Unlock()
+		return
+	}
+	hidden := s.denySuppressed
+	s.denySuppressed = 0
+	s.denyLogAfter = now.Add(30 * time.Second)
+	s.admissionMu.Unlock()
+	s.d.Log.Info("boot service denied", "mac", mac, "rule", rule, "suppressed_since_last", hidden)
 }
 
 // buildOffer answers a port-67 PXE DISCOVER in proxy mode.
@@ -224,10 +303,10 @@ func (s *Server) stampCommon(resp, req *dhcpv4.DHCPv4) {
 func (s *Server) scriptURL() string { return s.d.HTTPBase + "/boot.ipxe" }
 
 // track records the DHCP stage on the Client's Boot Session.
-func (s *Server) track(m *dhcpv4.DHCPv4, fw Firmware, ipxe bool, port int) {
+func (s *Server) track(m *dhcpv4.DHCPv4, peer net.Addr, fw Firmware, ipxe bool, port int) {
 	mac := m.ClientHWAddr.String()
 	ip := ""
-	if v := clientIP(m, nil); v != nil {
+	if v := clientIP(m, peer); v != nil {
 		ip = v.String()
 	}
 	detail := fmt.Sprintf("PXE %s on port %d (%s)", m.MessageType(), port, fw)

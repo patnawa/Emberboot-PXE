@@ -39,6 +39,7 @@ func TestMACGlob(t *testing.T) {
 		{"aa:?b:*", "aa:11:00:00:00:00", false},
 		{"aa:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:ff", true},
 		{"aa:bb:cc:dd:ee:ff", "aa:bb:cc:dd:ee:fe", false},
+		{"*", "", false},
 	}
 	for _, c := range cases {
 		if got := macGlobMatch(c.pattern, c.mac); got != c.want {
@@ -47,11 +48,18 @@ func TestMACGlob(t *testing.T) {
 	}
 }
 
+func TestUnknownIdentityCannotMatchCatchAllMACRule(t *testing.T) {
+	cfg := mustCfg(t, []config.Override{{Name: "known-only", MAC: "*", Menu: []string{"secret.iso"}}}, false)
+	if d := Evaluate(cfg, nil, net.ParseIP("10.0.0.50")); !d.Deny {
+		t.Fatalf("unknown identity matched catch-all MAC rule: %+v", d)
+	}
+}
+
 func TestFirstMatchWins(t *testing.T) {
 	cfg := mustCfg(t, []config.Override{
 		{Name: "lab", Subnet: "10.1.2.0/24", Menu: []string{"a.iso"}},
 		{Name: "deny-lab-vip", MAC: "aa:*", Deny: true},
-	}, true)
+	}, false)
 	d := Evaluate(cfg, mac(t, "aa:bb:cc:00:00:01"), net.ParseIP("10.1.2.9"))
 	if d.Deny || d.RuleName != "lab" {
 		t.Errorf("expected first rule (lab) to win, got %+v", d)
