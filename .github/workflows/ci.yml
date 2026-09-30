@@ -46,7 +46,7 @@ jobs:
       - name: Race detector
         run: go test -count=1 -race ./...
       - name: Upload coverage
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-coverage
           path: coverage.out
