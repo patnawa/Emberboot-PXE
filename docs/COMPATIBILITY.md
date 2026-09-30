@@ -14,6 +14,14 @@ because Emberboot does not have a trusted publisher digest to compare. Publish
 with a temporary non-`.iso` name, verify the publisher's signed/published value
 yourself, then atomically rename on the same filesystem.
 
+On Windows, replacing an existing ISO uses `ReplaceFile` (PowerShell:
+`[System.IO.File]::Replace($temporaryPath, $isoPath, $null)`, with absolute paths
+on the same volume). A first publication can use a normal rename. Open readers
+keep their selected generation while the replacement is validated; Windows'
+`MoveFileEx`/Go `os.Rename` cannot overwrite a destination with open readers.
+ISO 9660 multi-extent files, including files larger than 4 GiB, are served as
+one seekable file. Incomplete or inconsistent extent chains fail validation.
+
 RAM-loading strategies show an estimated requirement before boot. The stock
 embedded iPXE binaries do not expose `MEMMAP_SETTINGS`, so Emberboot cannot
 reliably discover Client RAM and does not automatically reject an undersized

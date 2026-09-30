@@ -342,8 +342,18 @@ func writeScript(w http.ResponseWriter, script string) {
 // countingWriter measures payload bytes to detect fully-served payloads.
 type countingWriter struct {
 	http.ResponseWriter
-	n    int64
-	code int
+	n        int64
+	code     int
+	progress func()
+}
+
+const payloadProgressChunk = 256 << 10
+
+func (c *countingWriter) record(n int64) {
+	c.n += n
+	if n > 0 && c.progress != nil {
+		c.progress()
+	}
 }
 
 func (c *countingWriter) WriteHeader(code int) {
@@ -355,30 +365,69 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	if c.code == 0 {
 		c.code = http.StatusOK
 	}
-	n, err := c.ResponseWriter.Write(p)
-	c.n += int64(n)
-	return n, err
+	total := 0
+	for len(p) > 0 {
+		chunk := p[:min(len(p), payloadProgressChunk)]
+		n, err := c.ResponseWriter.Write(chunk)
+		total += n
+		c.record(int64(n))
+		if err != nil {
+			return total, err
+		}
+		if n != len(chunk) {
+			return total, io.ErrShortWrite
+		}
+		p = p[n:]
+	}
+	return total, nil
 }
 
 // ReadFrom preserves net/http's optimized file-to-socket path (sendfile on
-// supported platforms) while still counting payload bytes. Without this,
-// wrapping ResponseWriter forces every multi-gigabyte ISO through a 32 KiB
-// userspace copy loop.
+// supported platforms). Bounded batches report actual progress during long
+// transfers; one unbounded ReadFrom only reports after the entire ISO finishes.
 func (c *countingWriter) ReadFrom(r io.Reader) (int64, error) {
 	if c.code == 0 {
 		c.code = http.StatusOK
 	}
-	var (
-		n   int64
-		err error
-	)
 	if rf, ok := c.ResponseWriter.(io.ReaderFrom); ok {
-		n, err = rf.ReadFrom(r)
-	} else {
-		n, err = io.Copy(c.ResponseWriter, r)
+		// ServeContent uses CopyN, which supplies its own LimitedReader.
+		// Keep one limit around the real source so sendfile can recognize it,
+		// while accounting against every caller-supplied byte bound.
+		var limits []*io.LimitedReader
+		for {
+			limit, ok := r.(*io.LimitedReader)
+			if !ok {
+				break
+			}
+			limits = append(limits, limit)
+			r = limit.R
+		}
+		var total int64
+		for {
+			batch := int64(payloadProgressChunk)
+			for _, limit := range limits {
+				batch = min(batch, limit.N)
+			}
+			if batch <= 0 {
+				return total, nil
+			}
+			limited := &io.LimitedReader{R: r, N: batch}
+			n, err := rf.ReadFrom(limited)
+			for _, limit := range limits {
+				limit.N -= n
+			}
+			total += n
+			c.record(n)
+			if err == io.EOF {
+				err = nil
+			}
+			if err != nil || limited.N != 0 {
+				return total, err
+			}
+		}
 	}
-	c.n += n
-	return n, err
+	// Hide ReadFrom to route the fallback through Write without recursion.
+	return io.Copy(struct{ io.Writer }{c}, r)
 }
 
 func (c *countingWriter) Unwrap() http.ResponseWriter { return c.ResponseWriter }
@@ -508,7 +557,7 @@ func (s *BootServer) handleISO(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	sessionID := s.trackGrant(r, grant, "payload", "downloading ISO "+name)
 	w.Header().Set("Cache-Control", "private, no-store")
-	cw := &countingWriter{ResponseWriter: w}
+	cw := &countingWriter{ResponseWriter: w, progress: s.d.Sessions.TrackTransfer(sessionID)}
 	http.ServeContent(cw, r, name, img.ModTime, f)
 	s.d.Metrics.HTTPPayloadBytes.Add(float64(cw.n))
 	s.count("iso", cw.code)
@@ -544,7 +593,7 @@ func (s *BootServer) handleISOFile(w http.ResponseWriter, r *http.Request) {
 	defer rs.Close()
 	sessionID := s.trackGrant(r, grant, "payload", fmt.Sprintf("fetching %s from %s", inside, name))
 	w.Header().Set("Cache-Control", "private, no-store")
-	cw := &countingWriter{ResponseWriter: w}
+	cw := &countingWriter{ResponseWriter: w, progress: s.d.Sessions.TrackTransfer(sessionID)}
 	http.ServeContent(cw, r, path.Base(inside), mod, rs)
 	s.d.Metrics.HTTPPayloadBytes.Add(float64(cw.n))
 	s.count("isofile", cw.code)

@@ -38,6 +38,9 @@ type Deps struct {
 	// AllowTarget enforces current per-client policy for discovery and login.
 	// It is evaluated after the coarse source-network admission check.
 	AllowTarget func(clientIP net.IP, targetSuffix string) bool
+	// NewTargetPolicy captures connection identity once while the returned
+	// predicate continues to enforce current policy on discovery/login/reads.
+	NewTargetPolicy func(clientIP net.IP) func(targetSuffix string) bool
 	// Connection limits bound descriptors and per-connection buffers. Zero
 	// applies production defaults sized for at least 300 concurrent clients.
 	MaxConnections      int
@@ -264,9 +267,25 @@ type conn struct {
 	// initiator's MaxRecvDataSegmentLength: our Data-In chunk bound.
 	peerMaxDSL        int
 	lastAuthorization time.Time
+	targetPolicy      func(string) bool
+	targetPolicySet   bool
 }
 
 const ourMaxDSL = 262144
+
+func (cn *conn) allowTarget(suffix string) bool {
+	ip := sourceIP(cn.c.RemoteAddr())
+	if cn.s.d.NewTargetPolicy != nil {
+		if !cn.targetPolicySet {
+			cn.targetPolicy = cn.s.d.NewTargetPolicy(ip)
+			cn.targetPolicySet = true
+		}
+		if cn.targetPolicy == nil || !cn.targetPolicy(suffix) {
+			return false
+		}
+	}
+	return cn.s.d.AllowTarget == nil || cn.s.d.AllowTarget(ip, suffix)
+}
 
 func (s *Server) handleConn(nc net.Conn) {
 	defer nc.Close()
@@ -309,7 +328,7 @@ func (cn *conn) dispatch(p *pdu) error {
 		return fmt.Errorf("iSCSI source authorization revoked")
 	}
 	if cn.loggedIn && time.Since(cn.lastAuthorization) >= 2*time.Second {
-		if !cn.discovery && cn.target != "" && cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(ip, cn.target) {
+		if !cn.discovery && cn.target != "" && !cn.allowTarget(cn.target) {
 			return fmt.Errorf("iSCSI session authorization revoked")
 		}
 		cn.lastAuthorization = time.Now()
@@ -358,8 +377,7 @@ func (cn *conn) handleLogin(p *pdu) error {
 	resp[0] = opLoginResp
 	copy(resp[8:14], p.hdr[8:14]) // ISID echo
 	copy(resp[16:20], p.hdr[16:20])
-	clientIP := sourceIP(cn.c.RemoteAddr())
-	if cn.target != "" && cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(clientIP, cn.target) {
+	if cn.target != "" && !cn.allowTarget(cn.target) {
 		return cn.loginError(resp, 0x02, 0x03)
 	}
 
@@ -392,7 +410,7 @@ func (cn *conn) handleLogin(p *pdu) error {
 			if !found {
 				return cn.loginError(resp, 0x02, 0x03) // not found
 			}
-			if cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(clientIP, suffix) {
+			if !cn.allowTarget(suffix) {
 				return cn.loginError(resp, 0x02, 0x03)
 			}
 			ra, size, closer, err := cn.s.d.Provider.OpenTarget(suffix)
@@ -429,7 +447,7 @@ func (cn *conn) handleLogin(p *pdu) error {
 		attached := false
 		flags = 0x80 | byte(csg<<2) | nsg
 		if nsg == 3 {
-			if cn.target != "" && cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(clientIP, cn.target) {
+			if cn.target != "" && !cn.allowTarget(cn.target) {
 				return cn.loginError(resp, 0x02, 0x03)
 			}
 			binary.BigEndian.PutUint16(resp[14:16], cn.s.nextTSIH())
@@ -476,7 +494,7 @@ func (cn *conn) handleText(p *pdu) error {
 	if _, ok := keys["SendTargets"]; ok {
 		var b strings.Builder
 		for _, suffix := range cn.s.d.Provider.TargetSuffixes() {
-			if cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(sourceIP(cn.c.RemoteAddr()), suffix) {
+			if !cn.allowTarget(suffix) {
 				continue
 			}
 			b.WriteString("TargetName=" + IQNPrefix + ":" + suffix)
@@ -534,7 +552,7 @@ func (cn *conn) handleSCSI(p *pdu) error {
 			return cn.reject(p)
 		}
 	}
-	if cn.s.d.AllowTarget != nil && !cn.s.d.AllowTarget(sourceIP(cn.c.RemoteAddr()), cn.target) {
+	if !cn.allowTarget(cn.target) {
 		return cn.reject(p)
 	}
 	edtl := binary.BigEndian.Uint32(p.hdr[20:24])

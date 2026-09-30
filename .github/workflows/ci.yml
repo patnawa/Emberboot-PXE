@@ -71,6 +71,9 @@ jobs:
         run: go build -trimpath ./cmd/emberbootd
       - name: Build ISO test utility
         run: go build -trimpath ./tools/geniso
+      - name: Windows regression tests
+        if: runner.os == 'Windows'
+        run: go test -count=1 ./...
 
   container-build:
     name: Build production container
@@ -84,7 +87,7 @@ jobs:
           version="ci-${GITHUB_SHA::12}"
           docker build --build-arg VERSION="$version" -t emberboot-ci -f deploy/Dockerfile .
           test "$(docker image inspect --format '{{.Config.User}}' emberboot-ci)" = "65532:65532"
-          test "$(docker run --rm --entrypoint /emberbootd emberboot-ci -version)" = "$version"
+          test "$(docker run --rm --entrypoint /emberbootd emberboot-ci -version)" = "emberbootd $version"
 
   vulnerability-scan:
     name: Go vulnerability scan

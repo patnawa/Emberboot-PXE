@@ -128,12 +128,13 @@ type Store struct {
 	log *slog.Logger
 	db  *sql.DB
 
-	mu      sync.Mutex
-	active  map[string]int64 // mac -> session id
-	lastAt  map[string]time.Time
-	ipToMAC map[string]ipIdentity // recent client IP -> MAC/session key
-	nextID  int64
-	now     func() time.Time
+	mu                 sync.Mutex
+	active             map[string]int64 // mac -> session id
+	lastAt             map[string]time.Time
+	ipToMAC            map[string]ipIdentity // recent client IP -> MAC/session key
+	nextID             int64
+	identityGeneration uint64
+	now                func() time.Time
 
 	queueMu      sync.Mutex
 	writes       chan writeOperation
@@ -159,8 +160,10 @@ type Store struct {
 }
 
 type ipIdentity struct {
-	MAC      string
-	LastSeen time.Time
+	MAC        string
+	LastSeen   time.Time
+	Generation uint64
+	BootUntil  time.Time
 }
 
 // Open creates/opens the database, applying schema. The parent directory is
@@ -369,6 +372,26 @@ func (s *Store) Touch(mac, ip, stage, detail string) int64 {
 	return s.touch(mac, ip, stage, detail, true)
 }
 
+// TouchObserved adds telemetry after ObserveIdentity has recorded a DHCP
+// packet. An older handler finishing later must not undo a newer observation.
+func (s *Store) TouchObserved(mac, ip, stage, detail string) int64 {
+	return s.touch(mac, ip, stage, detail, false)
+}
+
+// ObserveIdentity records DHCP identity independently of optional telemetry.
+// Call it even for denied clients: an IP reassignment must revoke the previous
+// occupant's policy before HTTP or iSCSI can authorize another request.
+func (s *Store) ObserveIdentity(mac, ip string) {
+	canonical, ok := hardwareMAC(mac)
+	addr := net.ParseIP(ip)
+	if !ok || addr == nil || addr.IsUnspecified() || addr.IsMulticast() {
+		return
+	}
+	s.mu.Lock()
+	s.rememberIdentityLocked(addr.String(), canonical, s.now())
+	s.mu.Unlock()
+}
+
 func (s *Store) touch(mac, ip, stage, detail string, authoritativeIdentity bool) int64 {
 	mac = strings.ToLower(mac)
 	now := s.now()
@@ -431,8 +454,13 @@ func (s *Store) TouchByIP(ip, stage, detail string) int64 {
 	}
 	s.mu.Lock()
 	identity, ok := s.ipToMAC[ip]
+	if identity.MAC == "" {
+		ok = false
+	}
 	if ok && s.now().Sub(identity.LastSeen) > identityTTL {
-		delete(s.ipToMAC, ip)
+		if !s.now().Before(identity.BootUntil) {
+			delete(s.ipToMAC, ip)
+		}
 		ok = false
 	}
 	s.mu.Unlock()
@@ -487,9 +515,14 @@ func (s *Store) MACForIP(ip string) string {
 		return ""
 	}
 	if s.now().Sub(identity.LastSeen) > identityTTL {
-		delete(s.ipToMAC, ip)
+		if !s.now().Before(identity.BootUntil) {
+			delete(s.ipToMAC, ip)
+		}
 		return ""
 	}
+	if identity.MAC == "" {
+		return ""
+	} // anonymous boot-generation marker
 	mac, ok := hardwareMAC(identity.MAC)
 	if !ok {
 		delete(s.ipToMAC, ip)
@@ -510,7 +543,13 @@ func (s *Store) rememberIdentityLocked(ip, mac string, now time.Time) {
 	if _, exists := s.ipToMAC[ip]; !exists && len(s.ipToMAC) >= maxIPIdentities {
 		return // fail closed under identity-flood pressure
 	}
-	s.ipToMAC[ip] = ipIdentity{MAC: mac, LastSeen: now}
+	identity := s.ipToMAC[ip]
+	if identity.MAC != mac {
+		s.identityGeneration++
+		identity = ipIdentity{MAC: mac, Generation: s.identityGeneration}
+	}
+	identity.LastSeen = now
+	s.ipToMAC[ip] = identity
 }
 
 // SetMeta attaches firmware/image/strategy details to a MAC's active session
@@ -943,7 +982,7 @@ func (s *Store) pruneIdentities() {
 	cutoff := s.now().Add(-identityTTL)
 	s.mu.Lock()
 	for ip, identity := range s.ipToMAC {
-		if identity.LastSeen.Before(cutoff) {
+		if identity.LastSeen.Before(cutoff) && !s.now().Before(identity.BootUntil) {
 			delete(s.ipToMAC, ip)
 		}
 	}
@@ -972,7 +1011,7 @@ func (s *Store) markStalled() {
 			delete(s.active, mac)
 			delete(s.lastAt, mac)
 			for ip, identity := range s.ipToMAC {
-				if identity.MAC == mac {
+				if identity.MAC == mac && !now.Before(identity.BootUntil) {
 					delete(s.ipToMAC, ip)
 				}
 			}

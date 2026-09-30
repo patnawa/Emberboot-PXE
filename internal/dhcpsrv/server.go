@@ -141,9 +141,13 @@ func (s *Server) handlerFor(port int) server4.Handler {
 		mac := m.ClientHWAddr
 		fw := classifyArch(m)
 		ipxe := isIPXE(m)
+		ip := clientIP(m, peer)
+		if ip != nil && s.d.Sessions != nil {
+			s.d.Sessions.ObserveIdentity(mac.String(), ip.String())
+		}
 
 		// Deny rules and lockdown apply before any response.
-		dec := rules.Evaluate(cfg, mac, clientIP(m, peer))
+		dec := rules.Evaluate(cfg, mac, ip)
 		if dec.Deny {
 			s.logDenied(mac.String(), dec.RuleName)
 			s.d.Metrics.DHCPIgnored.Inc()
@@ -313,7 +317,7 @@ func (s *Server) track(m *dhcpv4.DHCPv4, peer net.Addr, fw Firmware, ipxe bool, 
 	if ipxe {
 		detail = "iPXE handoff to HTTP boot script"
 	}
-	s.d.Sessions.Touch(mac, ip, "dhcp", detail)
+	s.d.Sessions.TouchObserved(mac, ip, "dhcp", detail)
 	s.d.Sessions.SetMeta(mac, fw.String(), "", "")
 }
 
@@ -321,6 +325,10 @@ func (s *Server) track(m *dhcpv4.DHCPv4, peer net.Addr, fw Firmware, ipxe bool, 
 func clientIP(m *dhcpv4.DHCPv4, peer net.Addr) net.IP {
 	if m.ClientIPAddr != nil && !m.ClientIPAddr.IsUnspecified() {
 		return m.ClientIPAddr
+	}
+	// The UDP source of a relayed request identifies the relay, not a Client.
+	if m.GatewayIPAddr != nil && !m.GatewayIPAddr.IsUnspecified() {
+		return nil
 	}
 	if udp, ok := peer.(*net.UDPAddr); ok && udp.IP != nil && !udp.IP.IsUnspecified() {
 		return udp.IP
@@ -332,7 +340,10 @@ func clientIP(m *dhcpv4.DHCPv4, peer net.Addr) net.IP {
 // does not (proxyDHCP offers to clients still acquiring a lease).
 func sendResponse(conn net.PacketConn, peer net.Addr, req, resp *dhcpv4.DHCPv4) error {
 	dest := peer
-	if udp, ok := peer.(*net.UDPAddr); ok {
+	if req.GatewayIPAddr != nil && !req.GatewayIPAddr.IsUnspecified() {
+		// RFC 2131 section 4.1: giaddr takes precedence over the broadcast bit.
+		dest = &net.UDPAddr{IP: req.GatewayIPAddr, Port: 67}
+	} else if udp, ok := peer.(*net.UDPAddr); ok {
 		if udp.IP == nil || udp.IP.IsUnspecified() || req.IsBroadcast() {
 			dest = &net.UDPAddr{IP: net.IPv4bcast, Port: udp.Port}
 			if udp.Port == 0 {

@@ -134,6 +134,9 @@ quiescence and ISO structure and records a full SHA-256, but it cannot assert
 publisher authenticity unless the operator compares that value to a trusted
 publisher digest.
 
+On Windows, use `ReplaceFile` / PowerShell `[System.IO.File]::Replace` to
+replace an existing ISO; see [publication details](docs/COMPATIBILITY.md).
+
 ## Security model
 
 - The management listener is local-only on first run. Remote binds require a

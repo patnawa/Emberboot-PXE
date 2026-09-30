@@ -18,7 +18,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,7 +36,6 @@ import (
 	"emberboot/internal/logging"
 	"emberboot/internal/metrics"
 	"emberboot/internal/netutil"
-	"emberboot/internal/rules"
 	"emberboot/internal/sessions"
 	"emberboot/internal/tftpsrv"
 )
@@ -339,18 +337,7 @@ func run() error {
 				}
 				return false
 			},
-			AllowTarget: func(clientIP net.IP, suffix string) bool {
-				img, ok := imgMgr.ImageForTarget(suffix)
-				if !ok || clientIP == nil {
-					return false
-				}
-				var mac net.HardwareAddr
-				if known := store.MACForIP(clientIP.String()); known != "" {
-					mac, _ = net.ParseMAC(known)
-				}
-				decision := rules.Evaluate(mgr.Current(), mac, clientIP)
-				return !decision.Deny && (decision.Menu == nil || slices.Contains(decision.Menu, img.FileName))
-			},
+			NewTargetPolicy: iscsiTargetPolicy(mgr.Current, store, imgMgr.ImageForTarget),
 			OnAttach: func(clientIP, target string) {
 				id := store.TouchByIP(clientIP, "payload", "attached iSCSI virtual CD "+target)
 				store.FinishID(id, sessions.ResultHandoff,

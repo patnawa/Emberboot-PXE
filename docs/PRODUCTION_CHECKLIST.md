@@ -95,7 +95,8 @@ For a container deployment:
   authenticity without comparing it to that trusted external value.
 - [ ] Copy large media using a name that does not end in `.iso` (for example
   `.iso.partial`), verify the completed local digest, then atomically rename
-  it to the final `.iso` name on the same filesystem.
+  it to the final `.iso` name on the same filesystem. Windows replacements
+  use `ReplaceFile` / `[System.IO.File]::Replace`; see [details](COMPATIBILITY.md).
 - [ ] Each approved ISO/version has a recorded strategy, publisher digest,
   answer-file revision, firmware mode, NIC model, and successful end-to-end
   result. A structurally `Ready` Image is not automatically compatible.

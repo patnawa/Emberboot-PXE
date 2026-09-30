@@ -57,7 +57,9 @@ security:
   # false = unknown MACs get no boot service (lockdown)
   allow_unknown_macs: true
   # Signed boot URLs are also bound to Client IP/MAC, selected Image digest,
-  # policy, and answer file. Valid range: 15-1440 minutes.
+  # policy, and answer file. Also bounds authorized iSCSI boot identities;
+  # DHCP reassignment and current policy can revoke them sooner.
+  # Valid range: 15-1440 minutes.
   boot_grant_ttl_minutes: 720
   # The embedded iSCSI target has no CHAP. Empty denies all iSCSI clients.
   # Add only boot VLANs that require the virtual-CD strategy, and also filter

@@ -7,41 +7,37 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/kdomanski/iso9660"
+	"sync"
 )
 
 var errValidationCanceled = fmt.Errorf("image validation canceled")
 
-// isoHandle is an open ISO with helpers to resolve and read files inside it.
-// The underlying os.File is safe for concurrent ReadAt, so one handle serves
-// many HTTP requests.
+// The immutable directory index and os.File.ReadAt can be shared by concurrent
+// HTTP readers. Each response gets its own seek position across all sections.
 type isoHandle struct {
-	f   *os.File
-	img *iso9660.Image
+	f         *os.File
+	root      *isoEntry
+	size      int64
+	indexOnce sync.Once
+	indexErr  error
 }
 
-func openISO(path string) (h *isoHandle, err error) {
-	var f *os.File
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			if f != nil {
-				f.Close()
-			}
-			h = nil
-			err = fmt.Errorf("malformed ISO metadata: %v", recovered)
-		}
-	}()
-	f, err = os.Open(path)
+func openISO(path string) (*isoHandle, error) {
+	f, err := openImageFile(path)
 	if err != nil {
 		return nil, err
 	}
-	img, err := iso9660.OpenImage(f)
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	root, err := readISORoot(f, info.Size())
 	if err != nil {
 		f.Close()
 		return nil, fmt.Errorf("not a readable ISO 9660 image: %w", err)
 	}
-	return &isoHandle{f: f, img: img}, nil
+	return &isoHandle{f: f, root: root, size: info.Size()}, nil
 }
 
 func (h *isoHandle) Close() {
@@ -50,69 +46,23 @@ func (h *isoHandle) Close() {
 	}
 }
 
-// validateContents walks every directory and probes the final byte of every
-// file extent. ISO parsers can successfully read the primary volume
-// descriptor of a truncated image; this full tree walk catches extents which
-// point beyond the actual copy. The checksum also reads the complete backing
-// file so validation fails on an unreadable/sparse remote copy rather than at
-// client boot time.
-func (h *isoHandle) validateContents(size int64, stop <-chan struct{}) (checksum string, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			checksum = ""
-			err = fmt.Errorf("malformed ISO metadata: %v", recovered)
-		}
-	}()
-	if size <= 0 {
-		return "", fmt.Errorf("empty ISO")
-	}
-	root, err := h.img.RootDir()
-	if err != nil {
-		return "", fmt.Errorf("read root directory: %w", err)
-	}
-	stack := []*iso9660.File{root}
-	entries := 0
-	const maxEntries = 1_000_000
-	for len(stack) > 0 {
-		select {
-		case <-stop:
-			return "", errValidationCanceled
-		default:
-		}
-		f := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		entries++
-		if entries > maxEntries {
-			return "", fmt.Errorf("ISO contains more than %d entries", maxEntries)
-		}
-		if f.IsDir() {
-			const maxDirectoryBytes = 256 << 20
-			if f.Size() < 0 || f.Size() > size || f.Size() > maxDirectoryBytes {
-				return "", fmt.Errorf("directory %q has implausible extent size %d", f.Name(), f.Size())
-			}
-			children, err := f.GetChildren()
-			if err != nil {
-				return "", fmt.Errorf("read directory %q: %w", f.Name(), err)
-			}
-			stack = append(stack, children...)
-			continue
-		}
-		if f.Size() == 0 {
-			continue
-		}
-		if f.Size() < 0 || f.Size() > size {
-			return "", fmt.Errorf("file %q has implausible extent size %d", f.Name(), f.Size())
-		}
-		r, ok := f.Reader().(io.ReaderAt)
-		if !ok {
-			return "", fmt.Errorf("file %q extent is not random-access", f.Name())
-		}
-		var last [1]byte
-		if n, err := r.ReadAt(last[:], f.Size()-1); n != 1 || err != nil {
-			return "", fmt.Errorf("file %q has an incomplete extent: read %d bytes: %w", f.Name(), n, err)
-		}
-	}
+func (h *isoHandle) index(stop <-chan struct{}) error {
+	h.indexOnce.Do(func() {
+		r := isoTreeReader{ra: h.f, size: h.size, stop: stop, visited: make(map[int64]bool)}
+		h.indexErr = r.readDirectory(h.root, 0)
+	})
+	return h.indexErr
+}
 
+// Validate all file sections and directories, then checksum the entire backing
+// file. A truncated final section must never be published as a Ready image.
+func (h *isoHandle) validateContents(size int64, stop <-chan struct{}) (string, error) {
+	if size <= 0 || size != h.size {
+		return "", fmt.Errorf("invalid ISO size")
+	}
+	if err := h.index(stop); err != nil {
+		return "", err
+	}
 	digest := sha256.New()
 	reader := io.NewSectionReader(h.f, 0, size)
 	buf := make([]byte, 1<<20)
@@ -141,30 +91,22 @@ func (h *isoHandle) validateContents(size int64, stop <-chan struct{}) (checksum
 	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-// resolve walks the directory tree case-insensitively (ISO9660 names are
-// uppercase-ish and Windows ISOs vary between boot/ and Boot/). Returns the
-// file entry or an error naming the missing component.
-func (h *isoHandle) resolve(pathInISO string) (*iso9660.File, error) {
-	cur, err := h.img.RootDir()
-	if err != nil {
+func (h *isoHandle) resolve(pathInISO string) (*isoEntry, error) {
+	if err := h.index(nil); err != nil {
 		return nil, err
 	}
-	parts := strings.Split(strings.Trim(pathInISO, "/"), "/")
-	for _, part := range parts {
+	cur := h.root
+	for _, part := range strings.Split(strings.Trim(pathInISO, "/"), "/") {
 		if part == "" {
 			continue
 		}
 		if !cur.IsDir() {
 			return nil, fmt.Errorf("%s: not a directory", cur.Name())
 		}
-		children, err := cur.GetChildren()
-		if err != nil {
-			return nil, err
-		}
-		var next *iso9660.File
-		for _, c := range children {
-			if strings.EqualFold(c.Name(), part) {
-				next = c
+		var next *isoEntry
+		for _, child := range cur.children {
+			if strings.EqualFold(child.Name(), part) {
+				next = child
 				break
 			}
 		}
@@ -176,14 +118,11 @@ func (h *isoHandle) resolve(pathInISO string) (*iso9660.File, error) {
 	return cur, nil
 }
 
-// exists reports whether a path resolves to a regular file, returning its
-// canonical resolved path for later serving.
 func (h *isoHandle) exists(pathInISO string) bool {
 	f, err := h.resolve(pathInISO)
 	return err == nil && !f.IsDir()
 }
 
-// sizeOf returns a file's size in bytes, 0 if it does not resolve.
 func (h *isoHandle) sizeOf(pathInISO string) int64 {
 	f, err := h.resolve(pathInISO)
 	if err != nil || f.IsDir() {
@@ -192,7 +131,6 @@ func (h *isoHandle) sizeOf(pathInISO string) int64 {
 	return f.Size()
 }
 
-// firstExisting returns the first candidate path that resolves to a file.
 func (h *isoHandle) firstExisting(candidates ...string) (string, bool) {
 	for _, p := range candidates {
 		if h.exists(p) {
@@ -202,8 +140,6 @@ func (h *isoHandle) firstExisting(candidates ...string) (string, bool) {
 	return "", false
 }
 
-// open returns a ReadSeeker over a file inside the ISO plus its size.
-// Files in ISO 9660 are contiguous extents, so this is a zero-copy view.
 func (h *isoHandle) open(pathInISO string) (io.ReadSeeker, int64, error) {
 	f, err := h.resolve(pathInISO)
 	if err != nil {
@@ -212,12 +148,8 @@ func (h *isoHandle) open(pathInISO string) (io.ReadSeeker, int64, error) {
 	if f.IsDir() {
 		return nil, 0, fmt.Errorf("%s: is a directory", pathInISO)
 	}
-	r := f.Reader()
-	rs, ok := r.(io.ReadSeeker)
-	if !ok {
-		// Never expected (Reader returns *io.SectionReader today); guard so
-		// an upstream change degrades loudly rather than corrupting serves.
-		return nil, 0, fmt.Errorf("%s: ISO reader is not seekable", pathInISO)
+	if len(f.extents) == 1 {
+		return io.NewSectionReader(h.f, f.extents[0].offset, f.size), f.size, nil
 	}
-	return rs, f.Size(), nil
+	return io.NewSectionReader(isoFileReader{ra: h.f, file: f}, 0, f.size), f.size, nil
 }

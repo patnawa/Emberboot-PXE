@@ -131,7 +131,8 @@ type Security struct {
 	// target. Empty denies every iSCSI connection. The target has no CHAP, so
 	// access must be constrained here and by the network firewall.
 	ISCSIAllowedSubnets []string `yaml:"iscsi_allowed_subnets"`
-	// BootGrantTTLMinutes is the lifetime of signed stage-two download URLs.
+	// BootGrantTTLMinutes is the lifetime of signed stage-two download URLs
+	// and authorized iSCSI boot identities (including installer reattachment).
 	// Long repository-based installs need hours, not minutes; grants remain
 	// bound to the client IP, image, current policy, and optional answer file.
 	BootGrantTTLMinutes int `yaml:"boot_grant_ttl_minutes"`

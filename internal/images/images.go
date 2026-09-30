@@ -854,7 +854,7 @@ func (m *Manager) OpenRaw(name string) (*os.File, error) {
 	m.mu.Unlock()
 	defer gen.release()
 
-	f, err := os.Open(filepath.Join(dir, filepath.Base(name)))
+	f, err := openImageFile(filepath.Join(dir, filepath.Base(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -884,7 +884,7 @@ func (m *Manager) OpenRawVersion(name, digest string) (io.ReadSeekCloser, Image,
 	m.mu.Unlock()
 
 	if current {
-		f, err := os.Open(filepath.Join(dir, filepath.Base(name)))
+		f, err := openImageFile(filepath.Join(dir, filepath.Base(name)))
 		if err == nil {
 			fi, statErr := f.Stat()
 			if statErr == nil && os.SameFile(gen.info, fi) && sameFileStamp(gen.info, fi) {
