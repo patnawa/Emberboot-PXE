@@ -1,6 +1,6 @@
 module emberboot
 
-go 1.25.13
+go 1.26.0
 
 require (
 	github.com/fsnotify/fsnotify v1.10.1
@@ -10,7 +10,7 @@ require (
 	github.com/pin/tftp/v3 v3.2.0
 	github.com/prometheus/client_golang v1.24.1
 	golang.org/x/crypto v0.55.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.49.0
 	golang.org/x/term v0.45.0
 	modernc.org/sqlite v1.56.0
 )
